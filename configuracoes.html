@@ -1,0 +1,151 @@
+{% extends 'base.html' %}
+
+{% block title %}Configurações do Sistema{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .status-container {
+        margin: 20px 0;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+    }
+    .status-text {
+        font-weight: bold;
+        color: #333;
+    }
+    .error {
+        color: red;
+        font-weight: bold;
+    }
+    .success {
+        color: green;
+        font-weight: bold;
+    }
+    button {
+        padding: 10px 20px;
+        margin: 5px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        background-color: #007bff;
+        color: white;
+        font-size: 16px;
+    }
+    button:hover {
+        background-color: #0056b3;
+    }
+    button:disabled {
+        background-color: #6c757d;
+        cursor: not-allowed;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Configurações do Sistema</h2>
+    
+    <div class="status-container">
+        <h3>Status do Sistema de Login</h3>
+        <p>Status Atual: <span id="system-status" class="status-text">Carregando...</span></p>
+        <button onclick="changeStatus('online')">Ativar Sistema</button>
+        <button onclick="changeStatus('offline')">Desativar Sistema</button>
+    </div>
+
+    <div class="status-container">
+        <h3>Manter Servidor Ativo (Nunca Dormir)</h3>
+        <p>Status Atual: <span id="never-sleep" class="status-text">Carregando...</span></p>
+        <button onclick="changeNeverSleep('true')">Ativar Nunca Dormir</button>
+        <button onclick="changeNeverSleep('false')">Desativar Nunca Dormir</button>
+    </div>
+
+    <p id="message"></p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    function fetchSettings() {
+        console.log('Buscando configurações...');
+        fetch('/api/system-settings')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Configurações recebidas:', data);
+                document.getElementById('system-status').textContent = data.system_status ? data.system_status.toUpperCase() : 'DESCONHECIDO';
+                document.getElementById('never-sleep').textContent = data.never_sleep === 'true' ? 'ATIVADO' : 'DESATIVADO';
+                document.getElementById('message').className = 'success';
+                document.getElementById('message').textContent = 'Configurações carregadas com sucesso.';
+            })
+            .catch(error => {
+                console.error('Erro ao carregar configurações:', error);
+                document.getElementById('message').className = 'error';
+                document.getElementById('message').textContent = 'Erro ao carregar configurações: ' + error.message;
+            });
+    }
+
+    function changeStatus(status) {
+        console.log('Alterando status do sistema para:', status);
+        fetch('/api/system-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ system_status: status })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Resposta da alteração de status:', data);
+            document.getElementById('message').className = 'success';
+            document.getElementById('message').textContent = data.message;
+            fetchSettings();
+        })
+        .catch(error => {
+            console.error('Erro ao atualizar status:', error);
+            document.getElementById('message').className = 'error';
+            document.getElementById('message').textContent = 'Erro ao atualizar status: ' + error.message;
+        });
+    }
+
+    function changeNeverSleep(neverSleep) {
+        console.log('Alterando never_sleep para:', neverSleep);
+        fetch('/api/system-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ never_sleep: neverSleep })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Resposta da alteração de never_sleep:', data);
+            document.getElementById('message').className = 'success';
+            document.getElementById('message').textContent = data.message;
+            fetchSettings();
+        })
+        .catch(error => {
+            console.error('Erro ao atualizar never_sleep:', error);
+            document.getElementById('message').className = 'error';
+            document.getElementById('message').textContent = 'Erro ao atualizar never_sleep: ' + error.message;
+        });
+    }
+
+    window.onload = () => {
+        console.log('Página carregada, iniciando fetchSettings...');
+        fetchSettings();
+    };
+</script>
+{% endblock %}
