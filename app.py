@@ -10,7 +10,7 @@ app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
 def conectar_banco():
-    db_path = os.environ.get('DB_PATH', '/opt/render/project/src/users.db')
+    db_path = os.path.join(os.getcwd(), 'users.db')
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn, conn.cursor()
