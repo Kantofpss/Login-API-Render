@@ -1,0 +1,8 @@
+Flask==2.3.3
+flask-jwt-extended==4.4.4
+python-dotenv==1.0.0
+bcrypt==4.0.1
+requests==2.31.0
+colorama==0.4.6
+gunicorn==22.0.0
+pyotp==2.9.0

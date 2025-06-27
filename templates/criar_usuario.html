@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+
+{% block title %}Criar Novo Usuário{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+.container {
+    max-width: 600px;
+    margin: 50px auto;
+}
+
+h1 {
+    color: #2962FF; /* Azul da logo */
+    text-align: center;
+    margin-bottom: 30px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.card {
+    background-color: #2a2a2a;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    border: none;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #e0e0e0;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 12px;
+    background-color: #333;
+    border: 1px solid #444;
+    border-radius: 5px;
+    box-sizing: border-box;
+    color: #e0e0e0;
+}
+
+.submit-btn {
+    background-color: #2962FF; /* Azul da logo */
+    color: #fff; /* Texto branco */
+    font-weight: bold;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1.1em;
+    width: 100%;
+    transition: background-color 0.3s ease;
+}
+
+.submit-btn:hover {
+    background-color: #0039cb; /* Tom de azul mais escuro para hover */
+}
+
+#message {
+    margin-top: 20px;
+    padding: 12px;
+    border-radius: 5px;
+    text-align: center;
+    color: #fff;
+    display: none;
+}
+
+#message.success {
+    background-color: #4caf50;
+    display: block;
+}
+
+#message.error {
+    background-color: #f44336;
+    display: block;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Criar Novo Usuário</h1>
+    <div class="card">
+        <div class="form-group">
+            <label for="username">Usuário:</label>
+            <input type="text" id="username" name="username" class="form-control">
+        </div>
+        <div class="form-group">
+            <label for="password">Senha:</label>
+            <input type="password" id="password" name="password" class="form-control">
+        </div>
+        <button class="submit-btn" onclick="createUser()">Criar Usuário</button>
+        <div id="message"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // O JavaScript permanece o mesmo
+    async function createUser() {
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value.trim();
+        const messageDiv = document.getElementById('message');
+
+        if (!username || !password) {
+            messageDiv.textContent = 'Por favor, preencha todos os campos.';
+            messageDiv.className = 'error';
+            return;
+        }
+        
+        try {
+            const response = await fetch('/admin/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await response.json();
+
+            messageDiv.textContent = data.message;
+            if (response.ok) {
+                messageDiv.className = 'success';
+                document.getElementById('username').value = '';
+                document.getElementById('password').value = '';
+            } else {
+                messageDiv.className = 'error';
+            }
+        } catch (error) {
+            messageDiv.textContent = 'Erro ao conectar com o servidor: ' + error.message;
+            messageDiv.className = 'error';
+        }
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,209 @@
+{% extends 'base.html' %}
+
+{% block title %}Gerenciar Usuários{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+.container {
+    max-width: 1200px;
+    margin: 50px auto;
+    padding: 30px;
+    background-color: #2a2a2a;
+    border-radius: 15px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+}
+
+h2 {
+    color: #2962FF; /* Azul da logo */
+    text-align: center;
+    margin-bottom: 30px;
+    font-size: 2.2em;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: 600;
+}
+
+.search-section {
+    margin-bottom: 25px;
+}
+
+.search-section input {
+    background-color: #333;
+    color: #e0e0e0; /* Cor do texto clara */
+    border: 1px solid #555;
+    border-radius: 8px;
+    padding: 12px;
+    width: 100%;
+    max-width: 400px;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.search-section input:focus {
+    outline: none;
+    border-color: #2962FF; /* Azul da logo no foco */
+    box-shadow: 0 0 0 4px rgba(41, 98, 255, 0.25); /* Sombra azul */
+}
+
+.search-section input::placeholder {
+    color: #888;
+}
+
+.table {
+    background-color: #333;
+    border-radius: 8px;
+    overflow: hidden;
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.table th {
+    background-color: #2962FF; /* Fundo do cabeçalho azul da logo */
+    color: #ffffff;
+    font-weight: 600;
+    text-align: center;
+    padding: 15px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.table td {
+    vertical-align: middle;
+    color: #2962FF; /* Cor do texto clara */
+    padding: 15px;
+    border-top: 1px solid #444;
+}
+
+tbody tr {
+    transition: background-color 0.2s ease-in-out;
+}
+
+tbody tr:hover {
+    background-color: #3c3c3c;
+}
+
+.btn-action {
+    padding: 8px 18px;
+    font-size: 0.95em;
+    font-weight: 600;
+    margin: 0 5px;
+    border: none;
+    border-radius: 6px;
+    color: white;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.btn-action:hover {
+    transform: translateY(-2px);
+    opacity: 0.9;
+}
+
+.btn-reset {
+    background-color: #2962FF; /* Botão de reset azul da logo */
+}
+
+.btn-reset:hover {
+    background-color: #0039cb; /* Azul mais escuro */
+}
+
+.btn-delete {
+    background-color: #2962FF; /* Vermelho para exclusão (mantido por usabilidade) */
+    border: none;
+}
+
+.btn-delete:hover {
+    background-color: #2962FF;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Gerenciamento de Usuários</h2>
+    <div class="search-section">
+        <input type="text" id="search-input" class="form-control" placeholder="Buscar por usuário...">
+    </div>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Usuário</th>
+                <th>HWID Registrado</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody id="users-table">
+            </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// O JavaScript permanece o mesmo
+document.addEventListener('DOMContentLoaded', function () {
+    const searchInput = document.getElementById('search-input');
+    const usersTable = document.getElementById('users-table');
+
+    function loadUsers(query = '') {
+        const url = query ? `/users/search?query=${encodeURIComponent(query)}` : '/users';
+        fetch(url, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => response.json())
+        .then(users => {
+            usersTable.innerHTML = '';
+            if (users.length === 0) {
+                usersTable.innerHTML = `<tr><td colspan="4" style="text-align: center;">Nenhum usuário encontrado.</td></tr>`;
+                return;
+            }
+            users.forEach(user => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td style="text-align: center;">${user.id}</td>
+                    <td>${user.username}</td>
+                    <td>${user.hwid || 'Não registrado'}</td>
+                    <td style="text-align: center;">
+                        <button class="btn btn-reset btn-action" data-id="${user.id}">Resetar HWID</button>
+                        <button class="btn btn-delete btn-action" data-id="${user.id}">Excluir</button>
+                    </td>
+                `;
+                usersTable.appendChild(row);
+            });
+        })
+        .catch(error => {
+            console.error('Erro ao carregar usuários:', error);
+            usersTable.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #f44336;">Erro ao carregar usuários.</td></tr>`;
+        });
+    }
+
+    loadUsers();
+
+    searchInput.addEventListener('input', function () {
+        loadUsers(this.value);
+    });
+
+    usersTable.addEventListener('click', function (e) {
+        const target = e.target;
+        const userId = target.dataset.id;
+
+        if (target.classList.contains('btn-reset')) {
+            fetch(`/users/reset_hwid/${userId}`, {
+                method: 'POST'
+            }).then(() => loadUsers(searchInput.value));
+        }
+
+        if (target.classList.contains('btn-delete')) {
+            if (confirm('Tem certeza que deseja excluir este usuário?')) {
+                fetch(`/admin/users/delete/${userId}`, {
+                    method: 'DELETE'
+                }).then(() => loadUsers(searchInput.value));
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

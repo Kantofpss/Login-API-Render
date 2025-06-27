@@ -1,0 +1,149 @@
+{% extends 'base.html' %}
+
+{% block title %}Configurações do Sistema{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+.container {
+    max-width: 800px;
+    margin: 50px auto;
+    padding: 30px;
+    background-color: #2a2a2a;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+h2 {
+    color: #2962FF; /* Azul da logo */
+    text-align: center;
+    margin-bottom: 30px;
+    font-size: 2.2em;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.status-section {
+    background-color: #333;
+    padding: 25px;
+    border-radius: 8px;
+    border: 1px solid #444;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.status-section h4 {
+    color: #ffffff; /* Azul da logo */
+    margin-bottom: 15px;
+    font-size: 1.5em;
+}
+
+.status-section p {
+    font-size: 1.2em;
+    margin: 0 0 25px;
+}
+
+#system-status {
+    font-weight: bold;
+    padding: 5px 10px;
+    border-radius: 5px;
+}
+
+#system-status.online {
+    color: #fff;
+    background-color: #4caf50; /* Verde para online */
+}
+
+#system-status.offline {
+    color: #fff;
+    background-color: #f44336; /* Vermelho para offline */
+}
+
+#toggle-status-btn {
+    background-color: #2962FF; /* Azul da logo */
+    color: #fff; /* Cor do texto branca para contraste */
+    border: none;
+    padding: 12px 25px;
+    font-size: 1.1em;
+    font-weight: bold;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    text-transform: uppercase;
+}
+
+#toggle-status-btn:hover {
+    background-color: #0039cb; /* Tom de azul mais escuro para hover */
+    transform: translateY(-2px);
+}
+
+#toggle-status-btn:active {
+    transform: translateY(0);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Configurações do Sistema</h2>
+    <div class="status-section">
+        <h4>Status do Sistema de Login</h4>
+        <p>Status Atual: <span id="system-status">Carregando...</span></p>
+        <button id="toggle-status-btn" class="btn">Mudar Status</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// O JavaScript permanece o mesmo
+document.addEventListener('DOMContentLoaded', function () {
+    const statusElement = document.getElementById('system-status');
+    const toggleButton = document.getElementById('toggle-status-btn');
+
+    function fetchSystemStatus() {
+        fetch('/api/system-status', {
+            method: 'GET',
+            headers: {'Content-Type': 'application/json'}
+        })
+        .then(response => response.json())
+        .then(data => {
+            const isOnline = data.status === 'online';
+            statusElement.textContent = isOnline ? 'Online' : 'Offline';
+            statusElement.classList.remove('online', 'offline');
+            statusElement.classList.add(isOnline ? 'online' : 'offline');
+            toggleButton.textContent = isOnline ? 'Desligar Sistema' : 'Ligar Sistema';
+        })
+        .catch(error => {
+            console.error('Erro ao buscar status:', error);
+            statusElement.textContent = 'Erro';
+            statusElement.classList.remove('online');
+            statusElement.classList.add('offline');
+        });
+    }
+
+    fetchSystemStatus();
+
+    toggleButton.addEventListener('click', function () {
+        const isCurrentlyOnline = statusElement.classList.contains('online');
+        const newStatus = isCurrentlyOnline ? 'offline' : 'online';
+
+        fetch('/api/system-status', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ status: newStatus })
+        })
+        .then(response => response.json())
+        .then(data => {
+            alert(data.message);
+            fetchSystemStatus();
+        })
+        .catch(error => {
+            console.error('Erro ao mudar status:', error);
+            alert('Erro ao mudar o status do sistema.');
+        });
+    });
+});
+</script>
+{% endblock %}
