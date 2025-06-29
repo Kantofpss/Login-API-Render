@@ -53,6 +53,22 @@
         border-radius: 5px;
         background-color: rgba(41, 98, 255, 0.1);
     }
+    
+    /* Estilos para o campo de input */
+    .version-input {
+        background-color: #444;
+        color: #e0e0e0;
+        border: 1px solid #555;
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin-right: 10px;
+        width: 120px;
+    }
+
+    .version-input:focus {
+        outline: none;
+        border-color: #2962FF;
+    }
 
     button {
         padding: 10px 20px;
@@ -112,6 +128,15 @@
     </div>
 
     <div class="status-container">
+        <h3>Versão do Sistema</h3>
+        <p>Versão Atual no Servidor: <span id="system-version" class="status-text">Carregando...</span></p>
+        <div>
+            <input type="text" id="new-version-input" class="version-input" placeholder="Ex: 2.1">
+            <button onclick="changeVersion()">Atualizar Versão</button>
+        </div>
+    </div>
+    
+    <div class="status-container">
         <h3>Manter Servidor Ativo (Nunca Dormir)</h3>
         <p>Status Atual: <span id="never-sleep" class="status-text">Carregando...</span></p>
         <button onclick="changeNeverSleep('true')">Ativar Nunca Dormir</button>
@@ -125,7 +150,6 @@
 {% block scripts %}
 {{ super() }}
 <script>
-    // O JavaScript para a funcionalidade permanece o mesmo.
     function fetchSettings() {
         fetch('/api/system-settings')
             .then(response => {
@@ -137,6 +161,8 @@
             .then(data => {
                 document.getElementById('system-status').textContent = data.system_status ? data.system_status.toUpperCase() : 'DESCONHECIDO';
                 document.getElementById('never-sleep').textContent = data.never_sleep === 'true' ? 'ATIVADO' : 'DESATIVADO';
+                // Carrega a versão do sistema
+                document.getElementById('system-version').textContent = data.system_version ? data.system_version : 'N/A';
             })
             .catch(error => {
                 const messageDiv = document.getElementById('message');
@@ -144,6 +170,7 @@
                 messageDiv.textContent = 'Erro ao carregar configurações: ' + error.message;
                 document.getElementById('system-status').textContent = 'ERRO';
                 document.getElementById('never-sleep').textContent = 'ERRO';
+                document.getElementById('system-version').textContent = 'ERRO';
             });
     }
 
@@ -152,50 +179,53 @@
         messageDiv.className = type;
         messageDiv.textContent = text;
         setTimeout(() => {
+            messageDiv.className = '';
             messageDiv.style.display = 'none';
         }, 4000); // A mensagem desaparece após 4 segundos
     }
-
-    function changeStatus(status) {
-        fetch('/api/system-settings', {
+    
+    // FUNÇÃO GENÉRICA PARA ENVIAR ATUALIZAÇÕES
+    function updateSetting(body) {
+         fetch('/api/system-settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ system_status: status })
+            body: JSON.stringify(body)
         })
         .then(response => {
             if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
+                // Tenta extrair uma mensagem de erro do corpo da resposta
+                return response.json().then(errorData => {
+                    throw new Error(errorData.mensagem || `HTTP error! Status: ${response.status}`);
+                });
             }
             return response.json();
         })
         .then(data => {
             showMessage('success', data.message);
-            fetchSettings();
+            fetchSettings(); // Recarrega todas as configurações
         })
         .catch(error => {
-            showMessage('error', 'Erro ao atualizar status: ' + error.message);
+            showMessage('error', 'Erro ao atualizar: ' + error.message);
         });
     }
 
+    function changeStatus(status) {
+        updateSetting({ system_status: status });
+    }
+
     function changeNeverSleep(neverSleep) {
-        fetch('/api/system-settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ never_sleep: neverSleep })
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            showMessage('success', data.message);
-            fetchSettings();
-        })
-        .catch(error => {
-            showMessage('error', 'Erro ao atualizar never_sleep: ' + error.message);
-        });
+        updateSetting({ never_sleep: neverSleep });
+    }
+    
+    // NOVA FUNÇÃO PARA MUDAR A VERSÃO
+    function changeVersion() {
+        const newVersion = document.getElementById('new-version-input').value.trim();
+        if (!newVersion) {
+            showMessage('error', 'Por favor, insira um número de versão.');
+            return;
+        }
+        updateSetting({ system_version: newVersion });
+        document.getElementById('new-version-input').value = ''; // Limpa o campo
     }
 
     window.onload = () => {

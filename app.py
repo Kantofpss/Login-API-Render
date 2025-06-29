@@ -9,27 +9,43 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
+# --- FUNÇÃO ATUALIZADA PARA ENCONTRAR O DB ---
+def get_db_path():
+    """Determina o caminho do banco de dados, priorizando o disco do Render."""
+    # O Render define RENDER_DISK_PATH se um disco estiver montado.
+    render_disk_path = os.environ.get('RENDER_DISK_PATH')
+    if render_disk_path:
+        # Usa o disco persistente no Render.
+        return os.path.join(render_disk_path, 'users.db')
+    else:
+        # Para desenvolvimento local, cria o db na pasta 'instance'.
+        local_path = 'instance'
+        if not os.path.exists(local_path):
+            os.makedirs(local_path)
+        return os.path.join(local_path, 'users.db')
+
+# --- FUNÇÃO ATUALIZADA PARA CONECTAR AO DB ---
 def conectar_banco():
-    db_path = os.environ.get('DB_PATH', '/opt/render/project/src/users.db')
+    """Conecta ao banco de dados usando o caminho correto."""
+    db_path = get_db_path()
     try:
+        # Verifica se o banco de dados existe antes de tentar conectar
+        if not os.path.exists(db_path):
+             # Lança um erro se o db não foi criado pelo db_setup.py
+             raise sqlite3.DatabaseError(f"O arquivo de banco de dados não foi encontrado em '{db_path}'. Execute o script de setup primeiro.")
+        
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         return conn, conn.cursor()
     except sqlite3.Error as e:
-        print(f"Erro ao conectar ao banco de dados: {e}")
+        print(f"Erro ao conectar ao banco de dados em '{db_path}': {e}")
         raise
 
-# --- NOVO ENDPOINT ADICIONADO ---
 @app.route('/api/check-status', methods=['GET'])
 def check_status():
     """Endpoint para verificar o status e a versão do sistema antes do login."""
     try:
         conn, cursor = conectar_banco()
-        # Garante que os valores padrão existam, caso o db_setup não tenha sido executado corretamente
-        cursor.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('system_status', 'online')")
-        cursor.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('system_version', '2.0')")
-        conn.commit()
-        
         cursor.execute("SELECT key, value FROM system_settings WHERE key IN ('system_status', 'system_version')")
         settings_list = cursor.fetchall()
         settings = {row['key']: row['value'] for row in settings_list}
@@ -124,29 +140,21 @@ def configuracoes():
 
 @app.route('/api/system-settings', methods=['GET', 'POST'])
 def system_settings():
+    if not session.get('admin_logged_in'):
+        return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
+
     try:
         conn, cursor = conectar_banco()
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS system_settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        )
-        ''')
-        cursor.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('system_status', 'offline')")
-        cursor.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('never_sleep', 'false')")
-        conn.commit()
-
-        if not session.get('admin_logged_in'):
-            conn.close()
-            return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
 
         if request.method == 'POST':
             data = request.get_json()
             if not data:
                 conn.close()
                 return jsonify({'status': 'erro', 'mensagem': 'Dados inválidos.'}), 400
+            
             system_status = data.get('system_status')
             never_sleep = data.get('never_sleep')
+            system_version = data.get('system_version')
 
             if system_status not in ['online', 'offline', None]:
                 conn.close()
@@ -154,23 +162,31 @@ def system_settings():
             if never_sleep not in ['true', 'false', None]:
                 conn.close()
                 return jsonify({'status': 'erro', 'mensagem': 'Configuração de never_sleep inválida.'}), 400
-
+            
             updates = []
             if system_status is not None:
                 cursor.execute("UPDATE system_settings SET value = ? WHERE key = 'system_status'", (system_status,))
-                updates.append(f'Sistema definido como {system_status.upper()}.')
+                updates.append(f'Status do sistema definido como {system_status.upper()}.')
             if never_sleep is not None:
                 cursor.execute("UPDATE system_settings SET value = ? WHERE key = 'never_sleep'", (never_sleep,))
                 updates.append(f'Never Sleep definido como {never_sleep.upper()}.')
+            if system_version is not None:
+                clean_version = system_version.strip()
+                if not clean_version:
+                    conn.close()
+                    return jsonify({'status': 'erro', 'mensagem': 'A versão não pode ser vazia.'}), 400
+                cursor.execute("UPDATE system_settings SET value = ? WHERE key = 'system_version'", (clean_version,))
+                updates.append(f'Versão do sistema definida como {clean_version}.')
 
             conn.commit()
             conn.close()
             return jsonify({'status': 'sucesso', 'message': ' '.join(updates) if updates else 'Nenhuma alteração feita.'}), 200
 
-        cursor.execute("SELECT key, value FROM system_settings WHERE key IN ('system_status', 'never_sleep')")
+        cursor.execute("SELECT key, value FROM system_settings WHERE key IN ('system_status', 'never_sleep', 'system_version')")
         settings = {row['key']: row['value'] for row in cursor.fetchall()}
         conn.close()
         return jsonify(settings), 200
+
     except sqlite3.Error as e:
         print(f"Erro no endpoint /api/system-settings: {e}")
         return jsonify({'status': 'erro', 'mensagem': 'Erro no banco de dados'}), 500
