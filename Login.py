@@ -49,10 +49,7 @@ def pre_login_check():
     try:
         url_check = f"{CRAFT_URL}/api/system-settings"
         
-        # --- LINHA MODIFICADA COM AS CORREÇÕES ---
         response = requests.get(url_check, timeout=60, verify=False)
-        # ------------------------------------------
-
         response.raise_for_status()
 
         data = response.json()
@@ -79,12 +76,10 @@ def pre_login_check():
         print(f"\n{Cores.ERRO}[!] Falha na conexão com o servidor de autenticação.")
         print(f"{Cores.AVISO}Verifique sua conexão com a internet.")
         
-        # --- BLOCO DE DIAGNÓSTICO MANTIDO ---
         print(f"{Cores.ERRO}-------------------------------------------------")
         print(f"{Cores.ERRO}DETALHES TÉCNICOS DO ERRO:")
         print(e)
         print(f"{Cores.ERRO}-------------------------------------------------")
-        # ------------------------------------
         
         print(f"{Cores.AVISO}Encerrando em 10 segundos...")
         time.sleep(10)
@@ -145,20 +140,29 @@ def tela_de_login_servidor():
         hwid_atual = get_hwid()
         client_exe_hash = calculate_self_hash()
 
+        # Adicionado 'client_version' para verificação no servidor
         dados_de_login = {
             "usuario": usuario_input,
             "key": key_input,
             "hwid": hwid_atual,
             "verification_key": CHAVE_VERIFICACAO,
-            "client_hash": client_exe_hash
+            "client_hash": client_exe_hash,
+            "client_version": CLIENT_VERSION  # <-- NOVA LINHA ADICIONADA
         }
+        
         print(f"\n{Cores.INFO}[*] Conectando ao servidor de autenticação...")
         
-        # --- LINHA MODIFICADA COM AS CORREÇÕES ---
         response = requests.post(URL_LOGIN, json=dados_de_login, timeout=60, verify=False)
-        # ------------------------------------------
-
+        
         resposta_json = response.json()
+
+        # O código de status 426 é específico para "Upgrade Required"
+        if response.status_code == 426:
+             mensagem_erro = resposta_json.get("mensagem", "Versão do cliente desatualizada.")
+             print(f"\n{Cores.ERRO}[ERROR] {mensagem_erro}")
+             time.sleep(4)
+             return None
+
         if response.status_code in [200, 201] and resposta_json.get("status") == "sucesso":
             print(f"\n{Cores.SUCESSO}[SUCCESS] {resposta_json.get('mensagem')}")
             time.sleep(2)
@@ -168,6 +172,7 @@ def tela_de_login_servidor():
             print(f"\n{Cores.ERRO}[ERROR] {mensagem_erro} (Código: {response.status_code})")
             time.sleep(3)
             return None
+
     except requests.exceptions.RequestException as e:
         print(f"{Cores.ERRO}\n[ERROR] A conexão com o servidor de autenticação falhou. Verifique sua internet ou tente mais tarde.")
         time.sleep(3)

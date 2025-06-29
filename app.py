@@ -87,10 +87,8 @@ def configuracoes():
     return render_template('configuracoes.html')
 
 # --- API para Gerenciamento de Usuários (com sistema de tempo) ---
-
 @app.route('/users', methods=['GET'])
 def get_users():
-    """Retorna a lista de usuários, com suporte para busca."""
     if not session.get('admin_logged_in'):
         return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
     
@@ -98,7 +96,6 @@ def get_users():
     conn, cursor = conectar_banco()
 
     if query:
-        # Modificado para permitir busca pelo username
         cursor.execute('SELECT id, username, hwid, expiration_date FROM users WHERE username LIKE ? ORDER BY id DESC', ('%' + query + '%',))
     else:
         cursor.execute('SELECT id, username, hwid, expiration_date FROM users ORDER BY id DESC')
@@ -107,10 +104,8 @@ def get_users():
     conn.close()
     return jsonify(users), 200
 
-
 @app.route('/admin/users', methods=['POST'])
 def add_user():
-    """Adiciona um novo usuário com um tempo de acesso definido em dias."""
     if not session.get('admin_logged_in'):
         return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
     
@@ -122,8 +117,7 @@ def add_user():
     
     try:
         days = int(access_days)
-        if days <= 0:
-            raise ValueError()
+        if days <= 0: raise ValueError()
         expiration_date = datetime.now(timezone.utc) + timedelta(days=days)
     except (ValueError, TypeError):
         return jsonify({'status': 'erro', 'mensagem': 'A quantidade de dias deve ser um número positivo.'}), 400
@@ -143,7 +137,6 @@ def add_user():
 
 @app.route('/users/extend_access/<int:user_id>', methods=['POST'])
 def extend_access(user_id):
-    """Estende o tempo de acesso de um usuário."""
     if not session.get('admin_logged_in'):
         return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
 
@@ -190,16 +183,36 @@ def delete_user(user_id):
     conn.close()
     return jsonify({'status': 'sucesso', 'message': 'Usuário excluído com sucesso'}), 200
 
-# --- API de Login do Cliente (com verificação de tempo) ---
-
+# --- API de Login do Cliente (com verificação de tempo e versão) ---
 @app.route('/api/login', methods=['POST'])
 def api_login():
-    """Valida o login do cliente, incluindo a verificação da data de expiração."""
+    """Valida o login do cliente, incluindo a verificação da versão e data de expiração."""
     try:
-        conn, cursor = conectar_banco()
         data = request.get_json()
+        if not data:
+            return jsonify({'status': 'erro', 'mensagem': 'Dados da requisição ausentes.'}), 400
 
-        if not data or not all(k in data for k in ['usuario', 'key', 'hwid']):
+        conn, cursor = conectar_banco()
+
+        # --- NOVA VERIFICAÇÃO DE VERSÃO NO SERVIDOR ---
+        cursor.execute("SELECT value FROM system_settings WHERE key = 'system_version'")
+        setting = cursor.fetchone()
+        required_version = setting['value'] if setting else None
+
+        if not required_version:
+            conn.close()
+            return jsonify({'status': 'erro', 'mensagem': 'A versão do sistema não está configurada no servidor.'}), 503
+
+        client_version = data.get('client_version')
+        if client_version != required_version:
+            conn.close()
+            return jsonify({
+                'status': 'erro', 
+                'mensagem': f'Sua versão ({client_version or "N/A"}) está desatualizada. Por favor, use a versão {required_version}.'
+            }), 426 # HTTP 426 Upgrade Required
+        # --- FIM DA VERIFICAÇÃO DE VERSÃO ---
+
+        if not all(k in data for k in ['usuario', 'key', 'hwid']):
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Dados da requisição incompletos.'}), 400
 
@@ -234,14 +247,15 @@ def api_login():
         return jsonify({'status': 'sucesso', 'mensagem': 'Login bem-sucedido!'}), 200
     
     except Exception as e:
+        # Garante que a conexão seja fechada em caso de erro
+        if 'conn' in locals() and conn:
+            conn.close()
         print(f"ERRO INESPERADO EM /api/login: {e}")
         return jsonify({'status': 'erro', 'mensagem': 'Ocorreu um erro inesperado no servidor.'}), 500
 
-# --- CORREÇÃO APLICADA AQUI ---
 # API PARA CONFIGURAÇÕES DO SISTEMA
 @app.route('/api/system-settings', methods=['GET', 'POST'])
 def system_settings():
-    # Requisições POST para alterar as configurações continuam protegidas
     if request.method == 'POST':
         if not session.get('admin_logged_in'):
             return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
@@ -255,17 +269,13 @@ def system_settings():
             
             for key, value in data.items():
                 cursor.execute('UPDATE system_settings SET value = ? WHERE key = ?', (value, key))
-
             conn.commit()
             conn.close()
             return jsonify({'status': 'sucesso', 'message': 'Configurações atualizadas com sucesso!'}), 200
         except Exception as e:
-            # Garante que a conexão seja fechada em caso de erro
-            if 'conn' in locals() and conn:
-                conn.close()
+            if 'conn' in locals() and conn: conn.close()
             return jsonify({'status': 'erro', 'mensagem': f'Erro ao atualizar configurações: {e}'}), 500
 
-    # Requisições GET para verificar o status são públicas para o cliente poder acessar
     if request.method == 'GET':
         try:
             conn, cursor = conectar_banco()
@@ -274,9 +284,7 @@ def system_settings():
             conn.close()
             return jsonify(settings), 200
         except Exception as e:
-            # Garante que a conexão seja fechada em caso de erro
-            if 'conn' in locals() and conn:
-                conn.close()
+            if 'conn' in locals() and conn: conn.close()
             return jsonify({'status': 'erro', 'mensagem': f'Erro ao buscar configurações: {e}'}), 500
 
 if __name__ == '__main__':
