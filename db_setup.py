@@ -29,14 +29,13 @@ def criar_banco():
         cursor = conn.cursor()
         print("Conexão estabelecida.")
 
-        # --- CORRIGIDO: Adicionados campos is_banned e ban_reason ---
+        # --- CORRIGIDO: Removida a coluna 'name' que não era utilizada ---
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
+            username TEXT UNIQUE,
             password TEXT NOT NULL,
             hwid TEXT,
-            username TEXT UNIQUE,
             expiration_date TEXT,
             is_banned INTEGER DEFAULT 0,
             ban_reason TEXT
