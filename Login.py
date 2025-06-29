@@ -129,6 +129,11 @@ def menu_principal():
     print(menu_texto)
 
 def pre_login_check():
+    """
+    Verificação de Requisitos Essenciais ANTES de tentar o login.
+    Esta função contacta o servidor para checar o status do sistema e a versão necessária.
+    Se algum requisito não for atendido, o programa encerra.
+    """
     limpar_tela()
     print(Cores.BANNER + "Iniciando KNTZ...")
     print(f"{Cores.INFO}[*] Verificando status e versão do sistema...")
@@ -141,12 +146,14 @@ def pre_login_check():
         server_status = data.get('system_status', 'offline')
         server_version = data.get('system_version', '0.0')
 
+        # REQUISITO 1: O sistema deve estar 'online'.
         if server_status != 'online':
             print(f"\n{Cores.ERRO}[!] O sistema está temporariamente offline.")
             print(f"{Cores.AVISO}Por favor, tente novamente mais tarde. Encerrando em 3 segundos...")
             time.sleep(3)
             os._exit(1)
 
+        # REQUISITO 2: A versão do cliente deve ser a mesma do servidor.
         if server_version != CLIENT_VERSION:
             print(f"\n{Cores.ERRO}[!] VERSÃO INVÁLIDA!")
             print(f"{Cores.AVISO}Sua versão ({CLIENT_VERSION}) está desatualizada. A versão necessária é {server_version}.")
@@ -208,6 +215,8 @@ def main():
     verificar_debugger_anexado()
     monitor_thread = threading.Thread(target=monitor_de_seguranca, daemon=True)
     monitor_thread.start()
+    
+    # Executa a verificação de requisitos antes de exibir o menu de login.
     pre_login_check()
 
     while True:
@@ -221,6 +230,8 @@ def main():
             if usuario_logado:
                 print(f"{Cores.SUCESSO}Sessão iniciada para {usuario_logado}. O monitoramento de segurança continua ativo.")
                 input("\nPressione Enter para deslogar e voltar ao menu...")
+                # Ao deslogar, checa novamente os pré-requisitos antes de mostrar o menu
+                pre_login_check()
         elif escolha == '3':
             hwid = get_hwid()
             limpar_tela()

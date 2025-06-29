@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import traceback
 
 load_dotenv()
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates') # Especificando a pasta de templates
 app.secret_key = os.urandom(24)
 
 # --- Funções do Banco de Dados ---
@@ -197,15 +197,27 @@ def api_login():
 
         conn, cursor = conectar_banco()
 
-        # 1. Checagem de Versão do Sistema (CORRIGIDO)
+        # <<< NOVA VERIFICAÇÃO DE REQUISITOS NO SERVIDOR >>>
+        # ETAPA 1: Checar se o sistema está online. Esta é a primeira verificação no banco de dados.
+        cursor.execute("SELECT value FROM system_settings WHERE key = 'system_status'")
+        status_row = cursor.fetchone()
+        system_status = status_row['value'] if status_row else 'offline'
+        if system_status != 'online':
+            conn.close()
+            # Retorna um código de erro que indica serviço indisponível.
+            return jsonify({'status': 'erro', 'mensagem': 'O sistema está em manutenção. Tente novamente mais tarde.'}), 503
+
+        # ETAPA 2: Checar se a versão do cliente é a correta.
         cursor.execute("SELECT value FROM system_settings WHERE key = 'system_version'")
         version_row = cursor.fetchone()
         required_version = version_row['value'] if version_row else '1.0'
         if client_version != required_version:
             conn.close()
-            return jsonify({'status': 'erro', 'mensagem': f'Versão desatualizada. Use a {required_version}.'}), 426
+            # Retorna um código de erro específico para atualização necessária.
+            return jsonify({'status': 'erro', 'mensagem': f'Versão desatualizada. Por favor, utilize a versão {required_version}.'}), 426
+        # <<< FIM DA VERIFICAÇÃO DE REQUISITOS >>>
 
-        # 2. Checagem do Usuário
+        # Se passou nos requisitos, prossegue com a lógica de login...
         cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
         user = cursor.fetchone()
         
@@ -213,22 +225,18 @@ def api_login():
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Usuário ou senha inválidos.'}), 401
 
-        # 3. Checagem de Banimento
         if user['is_banned']:
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': f"ACESSO BLOQUEADO. Motivo: {user['ban_reason']}"}), 403
 
-        # 4. Checagem do Tempo de Acesso
         if not user['expiration_date'] or datetime.now(timezone.utc) > datetime.fromisoformat(user['expiration_date']):
              conn.close()
              return jsonify({'status': 'erro', 'mensagem': 'Seu tempo de acesso expirou.'}), 403
 
-        # 5. Checagem de Senha
         if not user['password'] or not bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8')):
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Usuário ou senha inválidos.'}), 401
 
-        # 6. Checagem e Vínculo de HWID
         if user['hwid'] and user['hwid'] != hwid:
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Licença vinculada a outro dispositivo.'}), 403
@@ -255,6 +263,7 @@ def api_login():
 # Rota de system-settings
 @app.route('/api/system-settings', methods=['GET', 'POST'])
 def system_settings():
+    # A verificação de login de admin é necessária apenas para o método POST
     if request.method == 'POST':
         if not session.get('admin_logged_in'):
             return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
@@ -266,6 +275,7 @@ def system_settings():
         conn.close()
         return jsonify({'status': 'sucesso', 'message': 'Configurações atualizadas!'}), 200
     
+    # O método GET é público para que o cliente possa verificar os requisitos
     conn, cursor = conectar_banco()
     cursor.execute('SELECT key, value FROM system_settings')
     settings = {row['key']: row['value'] for row in cursor.fetchall()}
@@ -274,5 +284,8 @@ def system_settings():
 
 
 if __name__ == '__main__':
+    # A função criar_banco() deve ser chamada separadamente pelo db_setup.py
+    # import db_setup
+    # db_setup.criar_banco()
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=True, host='0.0.0.0', port=port)
