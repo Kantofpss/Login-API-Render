@@ -70,7 +70,7 @@ h2 {
 
 .table td {
     vertical-align: middle;
-    color: #2962FF; /* Cor do texto clara */
+    color: #e0e0e0; /* Cor do texto clara */
     padding: 15px;
     border-top: 1px solid #444;
 }
@@ -108,12 +108,11 @@ tbody tr:hover {
 }
 
 .btn-delete {
-    background-color: #2962FF; /* Vermelho para exclusão (mantido por usabilidade) */
-    border: none;
+    background-color: #d32f2f; /* Vermelho para exclusão */
 }
 
 .btn-delete:hover {
-    background-color: #2962FF;
+    background-color: #b71c1c;
 }
 </style>
 {% endblock %}
@@ -130,7 +129,7 @@ tbody tr:hover {
                 <th>ID</th>
                 <th>Usuário</th>
                 <th>HWID Registrado</th>
-                <th>Ações</th>
+                <th>Status da Licença</th> <th>Ações</th>
             </tr>
         </thead>
         <tbody id="users-table">
@@ -142,7 +141,6 @@ tbody tr:hover {
 {% block scripts %}
 {{ super() }}
 <script>
-// O JavaScript permanece o mesmo
 document.addEventListener('DOMContentLoaded', function () {
     const searchInput = document.getElementById('search-input');
     const usersTable = document.getElementById('users-table');
@@ -157,15 +155,38 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(users => {
             usersTable.innerHTML = '';
             if (users.length === 0) {
-                usersTable.innerHTML = `<tr><td colspan="4" style="text-align: center;">Nenhum usuário encontrado.</td></tr>`;
+                // Colspan atualizado para 5 colunas
+                usersTable.innerHTML = `<tr><td colspan="5" style="text-align: center;">Nenhum usuário encontrado.</td></tr>`;
                 return;
             }
             users.forEach(user => {
                 const row = document.createElement('tr');
+                
+                // --- Lógica para formatar a data de expiração e status ---
+                let expirationCellHTML;
+                if (user.expiration_date) {
+                    const expirationDate = new Date(user.expiration_date);
+                    const now = new Date();
+                    const options = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
+                    const formattedDate = expirationDate.toLocaleString('pt-BR', options);
+
+                    if (now > expirationDate) {
+                        // Estilo para licença expirada
+                        expirationCellHTML = `<td style="color: #ff8a80; text-align: center;">Expirado<br><small>(${formattedDate})</small></td>`;
+                    } else {
+                        // Estilo para licença ativa
+                        expirationCellHTML = `<td style="color: #b9f6ca; text-align: center;">Ativo<br><small>(${formattedDate})</small></td>`;
+                    }
+                } else {
+                    expirationCellHTML = `<td style="text-align: center;">Sem Licença</td>`;
+                }
+                // --- Fim da lógica de formatação ---
+
                 row.innerHTML = `
                     <td style="text-align: center;">${user.id}</td>
-                    <td>${user.username}</td>
-                    <td>${user.hwid || 'Não registrado'}</td>
+                    <td style="text-align: center;">${user.username}</td>
+                    <td style="text-align: center;">${user.hwid || 'Não registrado'}</td>
+                    ${expirationCellHTML}
                     <td style="text-align: center;">
                         <button class="btn btn-reset btn-action" data-id="${user.id}">Resetar HWID</button>
                         <button class="btn btn-delete btn-action" data-id="${user.id}">Excluir</button>
@@ -176,7 +197,7 @@ document.addEventListener('DOMContentLoaded', function () {
         })
         .catch(error => {
             console.error('Erro ao carregar usuários:', error);
-            usersTable.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #f44336;">Erro ao carregar usuários.</td></tr>`;
+            usersTable.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #f44336;">Erro ao carregar usuários.</td></tr>`;
         });
     }
 
@@ -191,12 +212,14 @@ document.addEventListener('DOMContentLoaded', function () {
         const userId = target.dataset.id;
 
         if (target.classList.contains('btn-reset')) {
+            // Ação de resetar HWID (lógica existente mantida)
             fetch(`/users/reset_hwid/${userId}`, {
                 method: 'POST'
             }).then(() => loadUsers(searchInput.value));
         }
 
         if (target.classList.contains('btn-delete')) {
+            // Ação de excluir usuário (lógica existente mantida)
             if (confirm('Tem certeza que deseja excluir este usuário?')) {
                 fetch(`/admin/users/delete/${userId}`, {
                     method: 'DELETE'

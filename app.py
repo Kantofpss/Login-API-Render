@@ -38,20 +38,17 @@ def admin_login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        two_factor_code = request.form['two_factor_code']
+        # O campo e a lógica do Two Factor Code foram removidos daqui.
         try:
             conn, cursor = conectar_banco()
-            cursor.execute('SELECT password, two_factor_secret FROM admins WHERE username = ?', (username,))
+            cursor.execute('SELECT password FROM admins WHERE username = ?', (username,))
             admin = cursor.fetchone()
             conn.close()
             
             if admin and bcrypt.checkpw(password.encode('utf-8'), admin['password'].encode('utf-8')):
-                if admin['two_factor_secret']:
-                    totp = pyotp.TOTP(admin['two_factor_secret'])
-                    if not totp.verify(two_factor_code):
-                        return render_template('admin_login.html', error='Código 2FA inválido.')
                 session['admin_logged_in'] = True
                 return redirect(url_for('gerenciar_usuarios'))
+            
             return render_template('admin_login.html', error='Credenciais inválidas.')
         except Exception as e:
             return render_template('admin_login.html', error=f'Erro no servidor: {e}')
