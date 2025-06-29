@@ -6,10 +6,15 @@ import sys
 import requests
 from colorama import *
 
+# --- LINHA ADICIONADA ---
+# Desativa os avisos de segurança ao usar verify=False
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# -------------------------
+
 init(autoreset=True)
 
-CLIENT_VERSION = "2.0"  # Versão deste cliente. Mude para a versão esperada pelo servidor.
-
+CLIENT_VERSION = "2.0"
 CHAVE_VERIFICACAO = os.environ.get('VERIFICATION_KEY', 'em-uma-noite-escura-as-corujas-observam-42')
 CRAFT_URL = os.environ.get('CRAFT_URL', 'https://login-netfly.onrender.com')
 
@@ -26,19 +31,14 @@ def verificar_debugger():
         time.sleep(1)
         os._exit(1)
 
-# --- NOVA FUNÇÃO ADICIONADA: Calcula o hash do próprio executável ---
 def calculate_self_hash():
-    """Calcula o SHA256 hash do próprio executável em tempo de execução."""
     try:
-        # sys.executable retorna o caminho para o executável atual.
-        # Em um script .py, é o interpretador. Em um PyInstaller .exe, é o .exe.
         with open(sys.executable, 'rb') as f:
             bytes_content = f.read()
             return hashlib.sha256(bytes_content).hexdigest()
     except Exception as e:
         print(f"{Cores.ERRO}Erro ao calcular hash do executável: {e}")
         return "HASH_ERROR"
-# ------------------------------------------------------------------
 
 def pre_login_check():
     """Verifica o status do sistema e a versão antes de prosseguir."""
@@ -47,9 +47,13 @@ def pre_login_check():
     print(f"{Cores.INFO}[*] Verificando status e versão do sistema...")
     time.sleep(1)
     try:
-        url_check = f"{CRAFT_URL}/api/check-status"
-        response = requests.get(url_check, timeout=15)
-        response.raise_for_status()  # Lança um erro para respostas 4xx/5xx
+        url_check = f"{CRAFT_URL}/api/system-settings"
+        
+        # --- LINHA MODIFICADA COM AS CORREÇÕES ---
+        response = requests.get(url_check, timeout=60, verify=False)
+        # ------------------------------------------
+
+        response.raise_for_status()
 
         data = response.json()
         server_status = data.get('system_status', 'offline')
@@ -73,8 +77,17 @@ def pre_login_check():
 
     except requests.exceptions.RequestException as e:
         print(f"\n{Cores.ERRO}[!] Falha na conexão com o servidor de autenticação.")
-        print(f"{Cores.AVISO}Verifique sua conexão com a internet. Encerrando em 3 segundos...")
-        time.sleep(3)
+        print(f"{Cores.AVISO}Verifique sua conexão com a internet.")
+        
+        # --- BLOCO DE DIAGNÓSTICO MANTIDO ---
+        print(f"{Cores.ERRO}-------------------------------------------------")
+        print(f"{Cores.ERRO}DETALHES TÉCNICOS DO ERRO:")
+        print(e)
+        print(f"{Cores.ERRO}-------------------------------------------------")
+        # ------------------------------------
+        
+        print(f"{Cores.AVISO}Encerrando em 10 segundos...")
+        time.sleep(10)
         os._exit(1)
 
 def get_hwid():
@@ -130,17 +143,21 @@ def tela_de_login_servidor():
         usuario_input = input(f"{Cores.PROMPT}[?] Digite seu usuário: {Cores.INPUT}")
         key_input = input(f"{Cores.PROMPT}[?] Digite sua senha: {Cores.INPUT}")
         hwid_atual = get_hwid()
-        client_exe_hash = calculate_self_hash() # Calcula o hash do executável
+        client_exe_hash = calculate_self_hash()
 
         dados_de_login = {
             "usuario": usuario_input,
             "key": key_input,
             "hwid": hwid_atual,
             "verification_key": CHAVE_VERIFICACAO,
-            "client_hash": client_exe_hash # Envia o hash do executável
+            "client_hash": client_exe_hash
         }
         print(f"\n{Cores.INFO}[*] Conectando ao servidor de autenticação...")
-        response = requests.post(URL_LOGIN, json=dados_de_login, timeout=60)
+        
+        # --- LINHA MODIFICADA COM AS CORREÇÕES ---
+        response = requests.post(URL_LOGIN, json=dados_de_login, timeout=60, verify=False)
+        # ------------------------------------------
+
         resposta_json = response.json()
         if response.status_code in [200, 201] and resposta_json.get("status") == "sucesso":
             print(f"\n{Cores.SUCESSO}[SUCCESS] {resposta_json.get('mensagem')}")
@@ -151,7 +168,7 @@ def tela_de_login_servidor():
             print(f"\n{Cores.ERRO}[ERROR] {mensagem_erro} (Código: {response.status_code})")
             time.sleep(3)
             return None
-    except requests.exceptions.RequestException:
+    except requests.exceptions.RequestException as e:
         print(f"{Cores.ERRO}\n[ERROR] A conexão com o servidor de autenticação falhou. Verifique sua internet ou tente mais tarde.")
         time.sleep(3)
         return None
@@ -203,7 +220,7 @@ def tela_logado(nome_usuario):
 
 def main():
     verificar_debugger()
-    pre_login_check() # Verifica status e versão antes de exibir o menu
+    pre_login_check()
     
     while True:
         limpar_tela()

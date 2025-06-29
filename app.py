@@ -237,28 +237,20 @@ def api_login():
         print(f"ERRO INESPERADO EM /api/login: {e}")
         return jsonify({'status': 'erro', 'mensagem': 'Ocorreu um erro inesperado no servidor.'}), 500
 
-# --- [NOVO] API PARA CONFIGURAÇÕES DO SISTEMA ---
+# --- CORREÇÃO APLICADA AQUI ---
+# API PARA CONFIGURAÇÕES DO SISTEMA
 @app.route('/api/system-settings', methods=['GET', 'POST'])
 def system_settings():
-    if not session.get('admin_logged_in'):
-        return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
-
-    conn, cursor = conectar_banco()
-    
-    if request.method == 'GET':
-        try:
-            cursor.execute('SELECT key, value FROM system_settings')
-            settings = {row['key']: row['value'] for row in cursor.fetchall()}
-            conn.close()
-            return jsonify(settings), 200
-        except Exception as e:
-            conn.close()
-            return jsonify({'status': 'erro', 'mensagem': f'Erro ao buscar configurações: {e}'}), 500
-
+    # Requisições POST para alterar as configurações continuam protegidas
     if request.method == 'POST':
+        if not session.get('admin_logged_in'):
+            return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
+        
         try:
+            conn, cursor = conectar_banco()
             data = request.get_json()
             if not data:
+                conn.close()
                 return jsonify({'status': 'erro', 'mensagem': 'Nenhum dado enviado.'}), 400
             
             for key, value in data.items():
@@ -268,9 +260,24 @@ def system_settings():
             conn.close()
             return jsonify({'status': 'sucesso', 'message': 'Configurações atualizadas com sucesso!'}), 200
         except Exception as e:
-            conn.close()
+            # Garante que a conexão seja fechada em caso de erro
+            if 'conn' in locals() and conn:
+                conn.close()
             return jsonify({'status': 'erro', 'mensagem': f'Erro ao atualizar configurações: {e}'}), 500
 
+    # Requisições GET para verificar o status são públicas para o cliente poder acessar
+    if request.method == 'GET':
+        try:
+            conn, cursor = conectar_banco()
+            cursor.execute('SELECT key, value FROM system_settings')
+            settings = {row['key']: row['value'] for row in cursor.fetchall()}
+            conn.close()
+            return jsonify(settings), 200
+        except Exception as e:
+            # Garante que a conexão seja fechada em caso de erro
+            if 'conn' in locals() and conn:
+                conn.close()
+            return jsonify({'status': 'erro', 'mensagem': f'Erro ao buscar configurações: {e}'}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
