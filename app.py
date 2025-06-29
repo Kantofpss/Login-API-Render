@@ -45,7 +45,9 @@ def admin_login():
             admin = cursor.fetchone()
             conn.close()
             
-            if admin and bcrypt.checkpw(password.encode('utf-8'), admin['password']):
+            # CORREÇÃO: A senha do banco (admin['password']) é uma string e precisa ser
+            # codificada para bytes para o bcrypt.checkpw funcionar.
+            if admin and bcrypt.checkpw(password.encode('utf-8'), admin['password'].encode('utf-8')):
                 session['admin_logged_in'] = True
                 return redirect(url_for('gerenciar_usuarios'))
             
@@ -270,7 +272,9 @@ def api_login():
              return jsonify({'status': 'erro', 'mensagem': 'Seu tempo de acesso expirou.'}), 403
 
         # 5. Checagem de Senha
-        if not bcrypt.checkpw(data['key'].encode('utf-8'), user['password']):
+        # CORREÇÃO: A senha do banco (user['password']) é uma string e precisa ser
+        # codificada para bytes para o bcrypt.checkpw funcionar.
+        if not bcrypt.checkpw(data['key'].encode('utf-8'), user['password'].encode('utf-8')):
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Usuário ou senha inválidos.'}), 401
 
