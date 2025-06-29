@@ -45,15 +45,12 @@ def admin_login():
             admin = cursor.fetchone()
             conn.close()
             
-            # CORREÇÃO: A senha do banco (admin['password']) é uma string e precisa ser
-            # codificada para bytes para o bcrypt.checkpw funcionar.
             if admin and bcrypt.checkpw(password.encode('utf-8'), admin['password'].encode('utf-8')):
                 session['admin_logged_in'] = True
                 return redirect(url_for('gerenciar_usuarios'))
             
             return render_template('admin_login.html', error='Credenciais inválidas.')
         except Exception as e:
-            # Mostra um erro genérico para o usuário e loga o erro real no console.
             print(f"ERRO NO LOGIN ADMIN: {e}")
             return render_template('admin_login.html', error='Ocorreu um erro no servidor.')
     return render_template('admin_login.html')
@@ -104,7 +101,6 @@ def get_users():
         return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
     
     query_param = request.args.get('query', '')
-    # O padrão é 'false', então se o parâmetro 'banned' não for enviado, ele busca usuários não-banidos.
     is_banned_filter = request.args.get('banned', 'false').lower() == 'true'
     
     conn, cursor = conectar_banco()
@@ -113,7 +109,6 @@ def get_users():
     sql = 'SELECT id, username, hwid, expiration_date, is_banned, ban_reason FROM users WHERE is_banned = ?'
     params = [is_banned_filter]
 
-    # Adiciona a busca por nome se o parâmetro 'query' for fornecido
     if query_param:
         sql += ' AND username LIKE ?'
         params.append(f'%{query_param}%')
@@ -151,10 +146,10 @@ def create_user():
             conn.close()
             return jsonify({'message': 'Este nome de usuário já está em uso.'}), 409
 
-        # Insere o novo usuário com is_banned=0 (não banido) por padrão
+        # --- CORRIGIDO: Inserindo o valor 0 (inteiro) para is_banned ---
         cursor.execute(
-            'INSERT INTO users (username, password, expiration_date, is_banned, ban_reason) VALUES (?, ?, ?, 0, NULL)',
-            (username, hashed_password, expiration_date.isoformat())
+            'INSERT INTO users (username, password, expiration_date, is_banned, ban_reason) VALUES (?, ?, ?, ?, NULL)',
+            (username, hashed_password, expiration_date.isoformat(), 0)
         )
         conn.commit()
         conn.close()
@@ -229,7 +224,6 @@ def report_violation():
         return jsonify({'status': 'erro', 'mensagem': 'HWID não fornecido.'}), 400
     
     conn, cursor = conectar_banco()
-    # Encontra o usuário pelo HWID e o bane
     cursor.execute('UPDATE users SET is_banned = 1, ban_reason = ? WHERE hwid = ?', (reason, hwid))
     conn.commit()
     conn.close()
@@ -272,8 +266,6 @@ def api_login():
              return jsonify({'status': 'erro', 'mensagem': 'Seu tempo de acesso expirou.'}), 403
 
         # 5. Checagem de Senha
-        # CORREÇÃO: A senha do banco (user['password']) é uma string e precisa ser
-        # codificada para bytes para o bcrypt.checkpw funcionar.
         if not bcrypt.checkpw(data['key'].encode('utf-8'), user['password'].encode('utf-8')):
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Usuário ou senha inválidos.'}), 401
@@ -303,8 +295,7 @@ def system_settings():
         data = request.get_json()
         conn, cursor = conectar_banco()
         for key, value in data.items():
-            # REPLACE funciona como INSERT OR UPDATE
-            cursor.execute('REPLACE INTO system_settings (key, value) VALUES (?, ?)', (key, value))
+            cursor.execute('REPLACE INTO system_settings (key, value) VALUES (?, ?)', (key, str(value)))
         conn.commit()
         conn.close()
         return jsonify({'status': 'sucesso', 'message': 'Configurações atualizadas!'}), 200
@@ -320,4 +311,3 @@ def system_settings():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=True, host='0.0.0.0', port=port)
-

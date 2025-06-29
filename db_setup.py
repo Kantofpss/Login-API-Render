@@ -15,7 +15,7 @@ def get_db_path():
         return os.path.join(local_path, 'users.db')
 
 def criar_banco():
-    """Cria o banco de dados e as tabelas, incluindo o novo campo para data de expiração."""
+    """Cria o banco de dados e as tabelas, incluindo os novos campos para banimento."""
     db_path = get_db_path()
     print(f"--- Conectando ao banco de dados em: {db_path} ---")
 
@@ -29,7 +29,7 @@ def criar_banco():
         cursor = conn.cursor()
         print("Conexão estabelecida.")
 
-        # --- MODIFICADO: Adicionado campo expiration_date ---
+        # --- CORRIGIDO: Adicionados campos is_banned e ban_reason ---
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,7 +37,9 @@ def criar_banco():
             password TEXT NOT NULL,
             hwid TEXT,
             username TEXT UNIQUE,
-            expiration_date TEXT
+            expiration_date TEXT,
+            is_banned INTEGER DEFAULT 0,
+            ban_reason TEXT
         )
         ''')
         print("Tabela 'users' verificada/criada.")
