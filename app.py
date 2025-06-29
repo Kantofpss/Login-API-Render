@@ -238,9 +238,8 @@ def api_login():
         if not data:
             return jsonify({'status': 'erro', 'mensagem': 'Dados da requisição ausentes.'}), 400
 
-        # --- CORREÇÃO: Usando os nomes de campo corretos e o método .get() para segurança ---
         username = data.get('usuario')
-        password = data.get('senha') # Alterado de 'key' para 'senha'
+        password = data.get('senha')
         hwid = data.get('hwid')
         client_version = data.get('client_version')
 
@@ -274,8 +273,9 @@ def api_login():
              conn.close()
              return jsonify({'status': 'erro', 'mensagem': 'Seu tempo de acesso expirou.'}), 403
 
-        # 5. Checagem de Senha
-        if not bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8')):
+        # 5. Checagem de Senha (com validação de segurança)
+        # Garante que o usuário tem uma senha no banco antes de tentar comparar
+        if not user['password'] or not bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8')):
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Usuário ou senha inválidos.'}), 401
 
@@ -288,7 +288,7 @@ def api_login():
             conn.commit()
 
         conn.close()
-        # --- ATUALIZADO: Adicionado 'expiration_date' na resposta de sucesso ---
+        # A mensagem de sucesso agora inclui a data de expiração.
         return jsonify({
             'status': 'sucesso', 
             'mensagem': 'Login bem-sucedido!',
@@ -296,7 +296,8 @@ def api_login():
         }), 200
 
     except Exception as e:
-        print(f"ERRO INESPERADO EM /api/login: {e}")
+        # A linha abaixo é útil para você ver o erro exato no console do seu servidor
+        print(f"ERRO INESPERADO EM /api/login: {e}") 
         return jsonify({'status': 'erro', 'mensagem': 'Ocorreu um erro inesperado no servidor.'}), 500
 
 @app.route('/api/system-settings', methods=['GET', 'POST'])
