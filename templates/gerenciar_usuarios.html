@@ -5,135 +5,73 @@
 {% block styles %}
 {{ super() }}
 <style>
-.container {
-    max-width: 1200px;
-    margin: 50px auto;
-    padding: 30px;
-    background-color: #2a2a2a;
-    border-radius: 15px;
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
-}
-
-h2 {
-    color: #2962FF; /* Azul da logo */
-    text-align: center;
-    margin-bottom: 30px;
-    font-size: 2.2em;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    font-weight: 600;
-}
-
-.search-section {
-    margin-bottom: 25px;
-}
-
-.search-section input {
-    background-color: #333;
-    color: #e0e0e0; /* Cor do texto clara */
-    border: 1px solid #555;
-    border-radius: 8px;
-    padding: 12px;
-    width: 100%;
-    max-width: 400px;
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
-}
-
-.search-section input:focus {
-    outline: none;
-    border-color: #2962FF; /* Azul da logo no foco */
-    box-shadow: 0 0 0 4px rgba(41, 98, 255, 0.25); /* Sombra azul */
-}
-
-.search-section input::placeholder {
-    color: #888;
-}
-
-.table {
-    background-color: #333;
-    border-radius: 8px;
-    overflow: hidden;
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-}
-
-.table th {
-    background-color: #2962FF; /* Fundo do cabeçalho azul da logo */
-    color: #ffffff;
-    font-weight: 600;
-    text-align: center;
-    padding: 15px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.table td {
-    vertical-align: middle;
-    color: #2962FF; /* Cor do texto clara */
-    padding: 15px;
-    border-top: 1px solid #444;
-}
-
-tbody tr {
-    transition: background-color 0.2s ease-in-out;
-}
-
-tbody tr:hover {
-    background-color: #3c3c3c;
-}
-
-.btn-action {
-    padding: 8px 18px;
-    font-size: 0.95em;
-    font-weight: 600;
-    margin: 0 5px;
-    border: none;
-    border-radius: 6px;
-    color: white;
-    transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
-.btn-action:hover {
-    transform: translateY(-2px);
-    opacity: 0.9;
-}
-
-.btn-reset {
-    background-color: #2962FF; /* Botão de reset azul da logo */
-}
-
-.btn-reset:hover {
-    background-color: #0039cb; /* Azul mais escuro */
-}
-
-.btn-delete {
-    background-color: #2962FF; /* Vermelho para exclusão (mantido por usabilidade) */
-    border: none;
-}
-
-.btn-delete:hover {
-    background-color: #2962FF;
-}
+    .container {
+        max-width: 1200px;
+        margin: 30px auto;
+        padding: 20px;
+    }
+    h2 { 
+        color: #2962FF; 
+        text-align: center; 
+        margin-bottom: 30px;
+        font-size: 2em;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        background-color: #2a2a2a;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    th, td {
+        padding: 15px 20px;
+        text-align: left;
+        border-bottom: 1px solid #3a3a3a;
+    }
+    th {
+        background-color: #333;
+        color: #e0e0e0;
+        font-weight: 500;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover { background-color: #313131; }
+    .status-expired { color: #f44336; font-weight: bold; }
+    .status-active { color: #4caf50; font-weight: bold; }
+    .actions button {
+        padding: 8px 12px;
+        margin: 0 4px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        color: white;
+        font-weight: 500;
+        transition: transform 0.2s;
+    }
+    .actions button:hover { transform: translateY(-2px); }
+    .btn-extend { background-color: #2962FF; }
+    .btn-reset { background-color: #ffc107; color: #1e1e1e;}
+    .btn-delete { background-color: #dc3545; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container">
     <h2>Gerenciamento de Usuários</h2>
-    <div class="search-section">
-        <input type="text" id="search-input" class="form-control" placeholder="Buscar por usuário...">
-    </div>
-    <table class="table">
+    <table>
         <thead>
             <tr>
                 <th>ID</th>
                 <th>Usuário</th>
-                <th>HWID Registrado</th>
+                <th>HWID (início)</th>
+                <th>Expira em</th>
+                <th>Status</th>
                 <th>Ações</th>
             </tr>
         </thead>
-        <tbody id="users-table">
+        <tbody id="user-table-body">
             </tbody>
     </table>
 </div>
@@ -142,68 +80,71 @@ tbody tr:hover {
 {% block scripts %}
 {{ super() }}
 <script>
-// O JavaScript permanece o mesmo
-document.addEventListener('DOMContentLoaded', function () {
-    const searchInput = document.getElementById('search-input');
-    const usersTable = document.getElementById('users-table');
-
-    function loadUsers(query = '') {
-        const url = query ? `/users/search?query=${encodeURIComponent(query)}` : '/users';
-        fetch(url, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
-        })
+function fetchUsers() {
+    fetch('/users')
         .then(response => response.json())
         .then(users => {
-            usersTable.innerHTML = '';
+            const tableBody = document.getElementById('user-table-body');
+            tableBody.innerHTML = '';
             if (users.length === 0) {
-                usersTable.innerHTML = `<tr><td colspan="4" style="text-align: center;">Nenhum usuário encontrado.</td></tr>`;
+                tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 20px;">Nenhum usuário encontrado.</td></tr>';
                 return;
             }
             users.forEach(user => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td style="text-align: center;">${user.id}</td>
-                    <td>${user.username}</td>
-                    <td>${user.hwid || 'Não registrado'}</td>
-                    <td style="text-align: center;">
-                        <button class="btn btn-reset btn-action" data-id="${user.id}">Resetar HWID</button>
-                        <button class="btn btn-delete btn-action" data-id="${user.id}">Excluir</button>
-                    </td>
+                const expirationDate = user.expiration_date ? new Date(user.expiration_date) : null;
+                const now = new Date();
+                
+                const statusHtml = !expirationDate ? `<span class="status-expired">Sem Licença</span>`
+                                 : (expirationDate < now ? `<span class="status-expired">Expirado</span>`
+                                 : `<span class="status-active">Ativo</span>`);
+
+                const formattedDate = expirationDate ? expirationDate.toLocaleString('pt-BR') : 'N/A';
+                const hwidDisplay = user.hwid ? user.hwid.substring(0, 15) + '...' : 'Não vinculado';
+
+                const row = `
+                    <tr>
+                        <td>${user.id}</td>
+                        <td>${user.username}</td>
+                        <td>${hwidDisplay}</td>
+                        <td>${formattedDate}</td>
+                        <td>${statusHtml}</td>
+                        <td class="actions">
+                            <button class="btn-extend" onclick="extendAccess(${user.id}, '${user.username}')">Estender</button>
+                            <button class="btn-reset" onclick="resetHwid(${user.id}, '${user.username}')">Resetar HWID</button>
+                            <button class="btn-delete" onclick="deleteUser(${user.id}, '${user.username}')">Deletar</button>
+                        </td>
+                    </tr>
                 `;
-                usersTable.appendChild(row);
+                tableBody.innerHTML += row;
             });
-        })
-        .catch(error => {
-            console.error('Erro ao carregar usuários:', error);
-            usersTable.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #f44336;">Erro ao carregar usuários.</td></tr>`;
         });
-    }
+}
 
-    loadUsers();
+function extendAccess(userId, username) {
+    const days = prompt(`Estender acesso para "${username}" por quantos dias?`, "30");
+    if (days === null || isNaN(parseInt(days)) || parseInt(days) <= 0) return;
+    
+    fetch(`/users/extend_access/${userId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days_to_add: days })
+    })
+    .then(r => r.json())
+    .then(data => { alert(data.message || data.mensagem); fetchUsers(); });
+}
 
-    searchInput.addEventListener('input', function () {
-        loadUsers(this.value);
-    });
+function resetHwid(userId, username) {
+    if (!confirm(`Tem certeza que deseja resetar o HWID de "${username}"?`)) return;
+    fetch(`/users/reset_hwid/${userId}`, { method: 'POST' })
+    .then(() => { alert('HWID resetado com sucesso!'); fetchUsers(); });
+}
 
-    usersTable.addEventListener('click', function (e) {
-        const target = e.target;
-        const userId = target.dataset.id;
+function deleteUser(userId, username) {
+    if (!confirm(`ATENÇÃO: Tem certeza que deseja DELETAR o usuário "${username}"? Esta ação é irreversível.`)) return;
+    fetch(`/admin/users/delete/${userId}`, { method: 'DELETE' })
+    .then(() => { alert('Usuário deletado com sucesso!'); fetchUsers(); });
+}
 
-        if (target.classList.contains('btn-reset')) {
-            fetch(`/users/reset_hwid/${userId}`, {
-                method: 'POST'
-            }).then(() => loadUsers(searchInput.value));
-        }
-
-        if (target.classList.contains('btn-delete')) {
-            if (confirm('Tem certeza que deseja excluir este usuário?')) {
-                fetch(`/admin/users/delete/${userId}`, {
-                    method: 'DELETE'
-                }).then(() => loadUsers(searchInput.value));
-            }
-        }
-    });
-});
+window.onload = fetchUsers;
 </script>
 {% endblock %}
