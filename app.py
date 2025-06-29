@@ -288,7 +288,12 @@ def api_login():
             conn.commit()
 
         conn.close()
-        return jsonify({'status': 'sucesso', 'mensagem': 'Login bem-sucedido!'}), 200
+        # --- ATUALIZADO: Adicionado 'expiration_date' na resposta de sucesso ---
+        return jsonify({
+            'status': 'sucesso', 
+            'mensagem': 'Login bem-sucedido!',
+            'expiration_date': user['expiration_date']
+        }), 200
 
     except Exception as e:
         print(f"ERRO INESPERADO EM /api/login: {e}")

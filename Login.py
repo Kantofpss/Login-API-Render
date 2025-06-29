@@ -6,6 +6,7 @@ import sys
 import requests
 import threading
 from colorama import *
+from datetime import datetime, timezone  # <-- IMPORTAÇÃO ADICIONADA
 
 # Tenta importar o psutil, se não conseguir, instala e importa.
 try:
@@ -47,7 +48,7 @@ BLACKLIST_PROCESSOS = [
     # Descompiladores e Ferramentas de Análise Reversa
     "dnspy.exe", "ghidra.exe", "cutter.exe", "binaryninja.exe", "malcat.exe", "reclass.net.exe",
     # Ferramentas de Análise de Memória e Rede
-    "cheatengine-x86_64.exe", "cheatengine-i386.exe", "charles.exe", 
+    "cheatengine-x86_64.exe", "cheatengine-i386.exe", "charles.exe",
     "fiddler.exe", "wireshark.exe", "procmon.exe", "processhacker.exe",
     "httpdebuggerui.exe", "tcpview.exe"
 ]
@@ -76,14 +77,14 @@ def reportar_violacao_e_sair(processo_detectado):
     print(f"{Cores.ERRO}    Ferramenta não autorizada em execução: {Cores.BRANCO}{processo_detectado}")
     print(f"{Cores.AVISO}    Esta atividade viola os termos de serviço.")
     print(f"{Cores.AVISO}    Um relatório foi enviado e seu acesso foi permanentemente revogado.")
-    
+
     try:
         url_report = f"{CRAFT_URL}/api/report-violation"
         requests.post(url_report, json={"hwid": hwid, "reason": f"Ferramenta detectada: {processo_detectado}"}, timeout=10, verify=False)
     except requests.exceptions.RequestException:
         # A falha em reportar não deve impedir o encerramento do cliente.
         pass
-    
+
     print(f"\n{Cores.BRANCO}Encerrando em 5 segundos...")
     time.sleep(5)
     os._exit(1) # Encerra o processo imediatamente e de forma segura.
@@ -91,7 +92,7 @@ def reportar_violacao_e_sair(processo_detectado):
 def monitor_de_seguranca():
     """Thread que monitora processos em segundo plano para detectar ferramentas de cracking."""
     processos_conhecidos = {p.name().lower() for p in psutil.process_iter(['name'])}
-    
+
     while True:
         try:
             # Itera sobre os processos em execução
@@ -99,7 +100,7 @@ def monitor_de_seguranca():
                 nome_processo = p.info['name'].lower()
                 if nome_processo in BLACKLIST_PROCESSOS and nome_processo not in processos_conhecidos:
                     reportar_violacao_e_sair(nome_processo)
-            
+
             # Atualiza a lista de processos conhecidos para a próxima verificação
             processos_conhecidos = {p.name().lower() for p in psutil.process_iter(['name'])}
         except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -115,17 +116,16 @@ def verificar_debugger_anexado():
 def limpar_tela():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-# ... (outras funções como exibir_banner_principal, menu_principal, etc. permanecem as mesmas)
 def exibir_banner_principal():
     banner_arte = r"""
 
 ██╗  ██╗███╗   ██╗████████╗███████╗
 ██║ ██╔╝████╗  ██║╚══██╔══╝╚══███╔╝
-█████╔╝ ██╔██╗ ██║   ██║     ███╔╝ 
-██╔═██╗ ██║╚██╗██║   ██║    ███╔╝  
+█████╔╝ ██╔██╗ ██║   ██║     ███╔╝
+██╔═██╗ ██║╚██╗██║   ██║    ███╔╝
 ██║  ██╗██║ ╚████║   ██║   ███████╗
 ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝
-                                   
+
 
     """
     info = f"""
@@ -154,7 +154,7 @@ def pre_login_check():
     time.sleep(1)
     try:
         url_check = f"{CRAFT_URL}/api/system-settings"
-        
+
         response = requests.get(url_check, timeout=60, verify=False)
         response.raise_for_status()
 
@@ -167,7 +167,7 @@ def pre_login_check():
             print(f"{Cores.AVISO}Por favor, tente novamente mais tarde. Encerrando em 3 segundos...")
             time.sleep(3)
             os._exit(1)
-        
+
         if server_version != CLIENT_VERSION:
             print(f"\n{Cores.ERRO}[!] VERSÃO INVÁLIDA!")
             print(f"{Cores.AVISO}Sua versão ({CLIENT_VERSION}) está desatualizada. A versão necessária é {server_version}.")
@@ -194,21 +194,47 @@ def tela_de_login_servidor():
         print(Cores.TITULO + "--- TELA DE LOGIN ---\n")
         usuario_input = input(f"{Cores.PROMPT}[?] Digite seu usuário: {Cores.INPUT}")
         key_input = input(f"{Cores.PROMPT}[?] Digite sua senha: {Cores.INPUT}")
-        
+
+        # --- CORRIGIDO: O nome do campo foi ajustado de "key" para "senha" ---
         dados_de_login = {
             "usuario": usuario_input,
-            "key": key_input,
+            "senha": key_input,
             "hwid": get_hwid(),
             "client_version": CLIENT_VERSION
         }
-        
+
         print(f"\n{Cores.INFO}[*] Conectando ao servidor de autenticação...")
         response = requests.post(URL_LOGIN, json=dados_de_login, timeout=60, verify=False)
         resposta_json = response.json()
 
         if response.status_code in [200, 201] and resposta_json.get("status") == "sucesso":
             print(f"\n{Cores.SUCESSO}[SUCCESS] {resposta_json.get('mensagem')}")
-            time.sleep(2)
+
+            # --- NOVO: Extrai e exibe o tempo de acesso restante ---
+            expiration_date_str = resposta_json.get('expiration_date')
+            if expiration_date_str:
+                try:
+                    # Converte a data do servidor (ISO format com timezone) para um objeto datetime
+                    expiration_date = datetime.fromisoformat(expiration_date_str)
+                    # Pega a data e hora atual com timezone UTC
+                    now_utc = datetime.now(timezone.utc)
+                    # Calcula a diferença
+                    time_left = expiration_date - now_utc
+
+                    # Formata a exibição do tempo restante
+                    if time_left.total_seconds() > 0:
+                        days = time_left.days
+                        hours, remainder = divmod(time_left.seconds, 3600)
+                        minutes, _ = divmod(remainder, 60)
+                        print(f"{Cores.INFO}[INFO] Tempo de acesso restante: {Cores.BRANCO}{days} dias, {hours} horas e {minutes} minutos.")
+                    else:
+                        print(f"{Cores.AVISO}[INFO] Seu tempo de acesso já expirou.")
+
+                except Exception as e:
+                    # Caso haja algum erro no parsing da data, não quebra o login
+                    print(f"{Cores.AVISO}[AVISO] Não foi possível calcular o tempo de acesso restante.")
+
+            time.sleep(4) # Tempo para o usuário ler as informações
             return usuario_input
         else:
             mensagem_erro = resposta_json.get("mensagem", "Erro desconhecido do servidor.")
@@ -227,14 +253,14 @@ def tela_de_login_servidor():
 def main():
     # Primeira verificação de segurança antes de qualquer coisa
     verificar_debugger_anexado()
-    
+
     # Inicia o monitor de segurança em uma thread separada que não impede o programa de fechar
     monitor_thread = threading.Thread(target=monitor_de_seguranca, daemon=True)
     monitor_thread.start()
-    
+
     # Continua com as verificações de servidor
     pre_login_check()
-    
+
     while True:
         verificar_debugger_anexado() # Verifica a cada loop do menu
         limpar_tela()
