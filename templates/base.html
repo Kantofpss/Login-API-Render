@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel KNTZ - {% block title %}{% endblock %}</title>
-    <link rel="icon" href="static/Logo.png" type="image/png"> 
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
+    <link rel="icon" href="{{ url_for('static', filename='Logo.png') }}" type="image/png"> 
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
  {% block styles %}
     <style>
         body {
-            font-family: 'Merriweather', sans-serif;
+            font-family: 'Segoe UI', sans-serif;
             margin: 0;
             padding: 0;
             background-color: #1a1a1a;
@@ -44,21 +44,31 @@
         .sidebar .nav-link {
             color: #e0e0e0;
             font-size: 1.1em;
-            padding: 10px 20px;
+            padding: 12px 20px;
             transition: color 0.3s ease, background-color 0.3s ease;
             border-radius: 5px;
             margin: 5px 10px;
+            display: flex;
+            align-items: center;
         }
-
+        
         .sidebar .nav-link:hover {
             color: #fff;
-            background-color: #2962FF; /* Azul da logo para o hover */
+            background-color: #2962FF;
         }
 
         .sidebar .nav-link.active {
-            color: #ffffff; /* Texto branco para contraste */
-            background-color: #2962FF; /* Azul da logo para link ativo */
+            color: #ffffff;
+            background-color: #2962FF;
             font-weight: bold;
+        }
+        
+        .sidebar .nav-link.logout-link {
+            color: #ff8a80; /* Cor vermelha para logout */
+        }
+        .sidebar .nav-link.logout-link:hover {
+            background-color: #d32f2f;
+            color: #fff;
         }
 
         .content {
@@ -85,16 +95,20 @@
             </div>
             <ul class="nav flex-column">
                 <li class="nav-item">
-                    <a class="nav-link" href="{{ url_for('criar_usuario_page') }}">Criar Usuários</a>
+                    <a class="nav-link {% if request.endpoint == 'criar_usuario_page' %}active{% endif %}" href="{{ url_for('criar_usuario_page') }}">Criar Usuários</a>
                 </li>
                 <li class="nav-item">
-                   <a class="nav-link" href="{{ url_for('gerenciar_usuarios') }}">Gerenciar Usuários</a>
+                   <a class="nav-link {% if request.endpoint == 'gerenciar_usuarios' %}active{% endif %}" href="{{ url_for('gerenciar_usuarios') }}">Gerenciar Usuários</a>
+                </li>
+                <!-- NOVO LINK PARA USUÁRIOS BANIDOS -->
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'banned_users_page' %}active{% endif %}" href="{{ url_for('banned_users_page') }}">HWIDs Banidos</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="{{ url_for('configuracoes') }}">Configurações</a>
+                    <a class="nav-link {% if request.endpoint == 'configuracoes' %}active{% endif %}" href="{{ url_for('configuracoes') }}">Configurações</a>
                 </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="{{ url_for('admin_logout') }}">Logout</a>
+                <li class="nav-item mt-auto">
+                    <a class="nav-link logout-link" href="{{ url_for('admin_logout') }}">Logout</a>
                 </li>
             </ul>
         </div>
@@ -106,7 +120,7 @@
     </div>
 
     {% block scripts %}
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     {% endblock %}
 </body>
 </html>

@@ -4,18 +4,32 @@ import subprocess
 import hashlib
 import sys
 import requests
+import threading
 from colorama import *
 
-# --- LINHA ADICIONADA ---
-# Desativa os avisos de segurança ao usar verify=False
+# Tenta importar o psutil, se não conseguir, instala e importa.
+try:
+    import psutil
+except ImportError:
+    print("Biblioteca 'psutil' não encontrada. Tentando instalar...")
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "psutil"])
+        import psutil
+    except Exception as e:
+        print(f"Falha ao instalar psutil. Por favor, instale manualmente com 'pip install psutil'. Erro: {e}")
+        time.sleep(5)
+        sys.exit(1)
+
+
+# Desativa avisos de SSL inseguro (se necessário)
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-# -------------------------
 
+# Inicializa o Colorama
 init(autoreset=True)
 
+# --- Configurações Globais ---
 CLIENT_VERSION = "2.0"
-CHAVE_VERIFICACAO = os.environ.get('VERIFICATION_KEY', 'em-uma-noite-escura-as-corujas-observam-42')
 CRAFT_URL = os.environ.get('CRAFT_URL', 'https://login-netfly.onrender.com')
 
 class Cores:
@@ -25,20 +39,112 @@ class Cores:
     SUCESSO, ERRO, AVISO, INFO, STATUS = VERDE, VERMELHO, AMARELO, AZUL, BRANCO
     PROMPT, INPUT, HWID = BRANCO, Fore.LIGHTCYAN_EX, AZUL
 
-def verificar_debugger():
-    if sys.gettrace() is not None:
-        print(f"{Cores.ERRO}Falha na inicialização do componente de segurança. Encerrando.")
-        time.sleep(1)
-        os._exit(1)
+# --- Sistema de Segurança Anti-Cracking ---
+BLACKLIST_PROCESSOS = [
+    # Debuggers Populares
+    "idaq.exe", "idaq64.exe", "x64dbg.exe", "x32dbg.exe", "ollydbg.exe",
+    "gdb.exe", "windbg.exe", "edb.exe",
+    # Descompiladores e Ferramentas de Análise Reversa
+    "dnspy.exe", "ghidra.exe", "cutter.exe", "binaryninja.exe", "malcat.exe", "reclass.net.exe",
+    # Ferramentas de Análise de Memória e Rede
+    "cheatengine-x86_64.exe", "cheatengine-i386.exe", "charles.exe", 
+    "fiddler.exe", "wireshark.exe", "procmon.exe", "processhacker.exe",
+    "httpdebuggerui.exe", "tcpview.exe"
+]
 
-def calculate_self_hash():
+def get_hwid():
+    """Obtém um HWID único do disco serial."""
     try:
-        with open(sys.executable, 'rb') as f:
-            bytes_content = f.read()
-            return hashlib.sha256(bytes_content).hexdigest()
-    except Exception as e:
-        print(f"{Cores.ERRO}Erro ao calcular hash do executável: {e}")
-        return "HASH_ERROR"
+        comando = 'wmic diskdrive get serialnumber'
+        resultado = subprocess.check_output(comando, shell=True, text=True, stderr=subprocess.DEVNULL)
+        linhas = resultado.strip().split('\n')
+        hwid_bruto = linhas[1].strip() if len(linhas) > 1 else "DefaultHWID_Error"
+        return hashlib.sha256(hwid_bruto.encode()).hexdigest()
+    except Exception:
+        # Fallback para outro método se wmic falhar
+        try:
+            uuid_out = subprocess.check_output(['wmic', 'csproduct', 'get', 'uuid']).decode().split('\n')[1].strip()
+            return hashlib.sha256(uuid_out.encode()).hexdigest()
+        except Exception:
+            return "ERRO_AO_OBTER_HWID"
+
+def reportar_violacao_e_sair(processo_detectado):
+    """Envia um relatório de violação para o servidor e encerra o aplicativo de forma segura."""
+    hwid = get_hwid()
+    limpar_tela()
+    print(f"\n{Cores.ERRO}[!] VIOLAÇÃO DE SEGURANÇA DETECTADA!")
+    print(f"{Cores.ERRO}    Ferramenta não autorizada em execução: {Cores.BRANCO}{processo_detectado}")
+    print(f"{Cores.AVISO}    Esta atividade viola os termos de serviço.")
+    print(f"{Cores.AVISO}    Um relatório foi enviado e seu acesso foi permanentemente revogado.")
+    
+    try:
+        url_report = f"{CRAFT_URL}/api/report-violation"
+        requests.post(url_report, json={"hwid": hwid, "reason": f"Ferramenta detectada: {processo_detectado}"}, timeout=10, verify=False)
+    except requests.exceptions.RequestException:
+        # A falha em reportar não deve impedir o encerramento do cliente.
+        pass
+    
+    print(f"\n{Cores.BRANCO}Encerrando em 5 segundos...")
+    time.sleep(5)
+    os._exit(1) # Encerra o processo imediatamente e de forma segura.
+
+def monitor_de_seguranca():
+    """Thread que monitora processos em segundo plano para detectar ferramentas de cracking."""
+    processos_conhecidos = {p.name().lower() for p in psutil.process_iter(['name'])}
+    
+    while True:
+        try:
+            # Itera sobre os processos em execução
+            for p in psutil.process_iter(['name']):
+                nome_processo = p.info['name'].lower()
+                if nome_processo in BLACKLIST_PROCESSOS and nome_processo not in processos_conhecidos:
+                    reportar_violacao_e_sair(nome_processo)
+            
+            # Atualiza a lista de processos conhecidos para a próxima verificação
+            processos_conhecidos = {p.name().lower() for p in psutil.process_iter(['name'])}
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            # Ignora erros se um processo for fechado durante a iteração
+            continue
+        time.sleep(2) # Pausa otimizada para não consumir muito CPU
+
+def verificar_debugger_anexado():
+    """Verifica se um debugger está anexado ao processo."""
+    if sys.gettrace() is not None:
+        reportar_violacao_e_sair("Debugger Anexado")
+
+def limpar_tela():
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+# ... (outras funções como exibir_banner_principal, menu_principal, etc. permanecem as mesmas)
+def exibir_banner_principal():
+    banner_arte = r"""
+
+██╗  ██╗███╗   ██╗████████╗███████╗
+██║ ██╔╝████╗  ██║╚══██╔══╝╚══███╔╝
+█████╔╝ ██╔██╗ ██║   ██║     ███╔╝ 
+██╔═██╗ ██║╚██╗██║   ██║    ███╔╝  
+██║  ██╗██║ ╚████║   ██║   ███████╗
+╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝
+                                   
+
+    """
+    info = f"""
+{Cores.BORDA}======================================================
+{Cores.STATUS}[*] Auth System        : {Cores.SUCESSO}Online Server
+{Cores.STATUS}[*] Security Source    : {Cores.SUCESSO}HWID Lock & Anti-Crack Pro
+{Cores.STATUS}[*] Client Version     : {Cores.BRANCO}{CLIENT_VERSION}
+{Cores.BORDA}======================================================
+"""
+    print(Cores.BANNER + banner_arte)
+    print(info)
+
+def menu_principal():
+    menu_texto = f"""
+{Cores.PROMPT}[1] Login
+{Cores.PROMPT}[3] {Cores.AVISO}Mostrar meu HWID
+{Cores.PROMPT}[0] Exit
+    """
+    print(menu_texto)
 
 def pre_login_check():
     """Verifica o status do sistema e a versão antes de prosseguir."""
@@ -75,61 +181,12 @@ def pre_login_check():
     except requests.exceptions.RequestException as e:
         print(f"\n{Cores.ERRO}[!] Falha na conexão com o servidor de autenticação.")
         print(f"{Cores.AVISO}Verifique sua conexão com a internet.")
-        
-        print(f"{Cores.ERRO}-------------------------------------------------")
-        print(f"{Cores.ERRO}DETALHES TÉCNICOS DO ERRO:")
-        print(e)
-        print(f"{Cores.ERRO}-------------------------------------------------")
-        
         print(f"{Cores.AVISO}Encerrando em 10 segundos...")
         time.sleep(10)
         os._exit(1)
 
-def get_hwid():
-    try:
-        comando = 'wmic diskdrive get serialnumber'
-        resultado = subprocess.check_output(comando, shell=True, text=True, stderr=subprocess.DEVNULL)
-        linhas = resultado.strip().split('\n')
-        hwid_bruto = linhas[1].strip() if len(linhas) > 1 else "DefaultHWID"
-        return hashlib.sha256(hwid_bruto.encode()).hexdigest()
-    except Exception:
-        return "ERRO_AO_OBTER_HWID_DISCO"
-
-def limpar_tela():
-    os.system('cls' if os.name == 'nt' else 'clear')
-
-def exibir_banner_principal():
-    banner_arte = r"""
-
-██╗  ██╗███╗   ██╗████████╗███████╗
-██║ ██╔╝████╗  ██║╚══██╔══╝╚══███╔╝
-█████╔╝ ██╔██╗ ██║   ██║     ███╔╝ 
-██╔═██╗ ██║╚██╗██║   ██║    ███╔╝  
-██║  ██╗██║ ╚████║   ██║   ███████╗
-╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝
-                                   
-
-    """
-    info = f"""
-{Cores.BORDA}======================================================
-{Cores.STATUS}[*] Auth System        : {Cores.SUCESSO}Online Server
-{Cores.STATUS}[*] Security Source    : {Cores.SUCESSO}HWID Lock & Client Hash
-{Cores.STATUS}[*] Client Version     : {Cores.BRANCO}{CLIENT_VERSION}
-{Cores.BORDA}======================================================
-"""
-    print(Cores.BANNER + banner_arte)
-    print(info)
-
-def menu_principal():
-    menu_texto = f"""
-{Cores.PROMPT}[1] Login
-{Cores.PROMPT}[3] {Cores.AVISO}Mostrar meu HWID
-{Cores.PROMPT}[0] Exit
-    """
-    print(menu_texto)
-
 def tela_de_login_servidor():
-    verificar_debugger()
+    verificar_debugger_anexado()
     try:
         URL_LOGIN = f"{CRAFT_URL}/api/login"
         limpar_tela()
@@ -137,31 +194,17 @@ def tela_de_login_servidor():
         print(Cores.TITULO + "--- TELA DE LOGIN ---\n")
         usuario_input = input(f"{Cores.PROMPT}[?] Digite seu usuário: {Cores.INPUT}")
         key_input = input(f"{Cores.PROMPT}[?] Digite sua senha: {Cores.INPUT}")
-        hwid_atual = get_hwid()
-        client_exe_hash = calculate_self_hash()
-
-        # Adicionado 'client_version' para verificação no servidor
+        
         dados_de_login = {
             "usuario": usuario_input,
             "key": key_input,
-            "hwid": hwid_atual,
-            "verification_key": CHAVE_VERIFICACAO,
-            "client_hash": client_exe_hash,
-            "client_version": CLIENT_VERSION  # <-- NOVA LINHA ADICIONADA
+            "hwid": get_hwid(),
+            "client_version": CLIENT_VERSION
         }
         
         print(f"\n{Cores.INFO}[*] Conectando ao servidor de autenticação...")
-        
         response = requests.post(URL_LOGIN, json=dados_de_login, timeout=60, verify=False)
-        
         resposta_json = response.json()
-
-        # O código de status 426 é específico para "Upgrade Required"
-        if response.status_code == 426:
-             mensagem_erro = resposta_json.get("mensagem", "Versão do cliente desatualizada.")
-             print(f"\n{Cores.ERRO}[ERROR] {mensagem_erro}")
-             time.sleep(4)
-             return None
 
         if response.status_code in [200, 201] and resposta_json.get("status") == "sucesso":
             print(f"\n{Cores.SUCESSO}[SUCCESS] {resposta_json.get('mensagem')}")
@@ -170,11 +213,10 @@ def tela_de_login_servidor():
         else:
             mensagem_erro = resposta_json.get("mensagem", "Erro desconhecido do servidor.")
             print(f"\n{Cores.ERRO}[ERROR] {mensagem_erro} (Código: {response.status_code})")
-            time.sleep(3)
+            time.sleep(4)
             return None
-
-    except requests.exceptions.RequestException as e:
-        print(f"{Cores.ERRO}\n[ERROR] A conexão com o servidor de autenticação falhou. Verifique sua internet ou tente mais tarde.")
+    except requests.exceptions.RequestException:
+        print(f"{Cores.ERRO}\n[ERROR] A conexão com o servidor de autenticação falhou.")
         time.sleep(3)
         return None
     except Exception as e:
@@ -182,52 +224,19 @@ def tela_de_login_servidor():
         time.sleep(3)
         return None
 
-def tela_logado(nome_usuario):
-    while True:
-        limpar_tela()
-        hwid_curto = get_hwid()[:10]
-        tela_logado_texto = f"""
-{Cores.SUCESSO}ACESSO AUTORIZADO
-{Cores.BORDA}======================================================
-{Cores.PROMPT}Bem-vindo, {Cores.INFO}{nome_usuario}{Cores.PROMPT}!
-{Cores.TEXTO}Licença vinculada ao HWID: {Cores.SUCESSO}{hwid_curto}...
-{Cores.BORDA}======================================================
-
-{Cores.PROMPT}[1] Executar Kntz
-{Cores.PROMPT}[2] Executar Ferramenta B
-{Cores.PROMPT}[3] Logout
-        """
-        print(tela_logado_texto)
-        try:
-            escolha = input(f"{Cores.PROMPT}[+] Escolha uma opção: {Cores.INPUT}")
-            if escolha == '1':
-                print(f"{Cores.SUCESSO}\n[+] Executando Kntz...")
-                try:
-                    subprocess.run([sys.executable, 'kntz.py'], check=True)
-                except subprocess.CalledProcessError as e:
-                    print(f"{Cores.ERRO}\n[!] Erro ao executar kntz.py: {e}")
-                except FileNotFoundError:
-                    print(f"{Cores.ERRO}\n[!] Arquivo kntz.py não encontrado.")
-                time.sleep(2)
-            elif escolha == '2':
-                print(f"{Cores.AVISO}\n[*] Executando a ferramenta B...")
-                time.sleep(2)
-            elif escolha == '3':
-                print(f"{Cores.AVISO}\n[*] Fazendo logout...")
-                time.sleep(1)
-                return
-            else:
-                print(f"{Cores.ERRO}\n[!] Opção inválida.")
-                time.sleep(2)
-        except KeyboardInterrupt:
-            print(f"{Cores.ERRO}\n\n[!] Logout forçado. Saindo...")
-            os._exit(0)
-
 def main():
-    verificar_debugger()
+    # Primeira verificação de segurança antes de qualquer coisa
+    verificar_debugger_anexado()
+    
+    # Inicia o monitor de segurança em uma thread separada que não impede o programa de fechar
+    monitor_thread = threading.Thread(target=monitor_de_seguranca, daemon=True)
+    monitor_thread.start()
+    
+    # Continua com as verificações de servidor
     pre_login_check()
     
     while True:
+        verificar_debugger_anexado() # Verifica a cada loop do menu
         limpar_tela()
         exibir_banner_principal()
         menu_principal()
@@ -235,7 +244,8 @@ def main():
         if escolha == '1':
             usuario_logado = tela_de_login_servidor()
             if usuario_logado:
-                tela_logado(usuario_logado)
+                print(f"{Cores.SUCESSO}Sessão iniciada para {usuario_logado}. O monitoramento de segurança continua ativo.")
+                input("\nPressione Enter para deslogar e voltar ao menu...")
         elif escolha == '3':
             hwid = get_hwid()
             limpar_tela()

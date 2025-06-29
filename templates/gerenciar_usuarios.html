@@ -15,7 +15,7 @@
 }
 
 h2 {
-    color: #2962FF; /* Azul da logo */
+    color: #2962FF;
     text-align: center;
     margin-bottom: 30px;
     font-size: 2.2em;
@@ -24,102 +24,46 @@ h2 {
     font-weight: 600;
 }
 
-.search-section {
-    margin-bottom: 25px;
-}
-
+.search-section { margin-bottom: 25px; }
 .search-section input {
     background-color: #333;
-    color: #070707; /* Cor do texto clara */
+    color: #e0e0e0;
     border: 1px solid #555;
     border-radius: 8px;
     padding: 12px;
     width: 100%;
     max-width: 400px;
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
-
 .search-section input:focus {
     outline: none;
-    border-color: #2962FF; /* Azul da logo no foco */
-    box-shadow: 0 0 0 4px rgba(41, 98, 255, 0.25); /* Sombra azul */
+    border-color: #2962FF;
+    box-shadow: 0 0 0 4px rgba(41, 98, 255, 0.25);
 }
 
-.search-section input::placeholder {
-    color: #888;
-}
+.table { background-color: #333; border-radius: 8px; overflow: hidden; width: 100%; border-collapse: separate; border-spacing: 0; }
+.table th { background-color: #2962FF; color: #ffffff; font-weight: 600; text-align: center; padding: 15px; text-transform: uppercase; letter-spacing: 1px; }
+.table td { vertical-align: middle; color: #e0e0e0; padding: 15px; border-top: 1px solid #444; }
+tbody tr:hover { background-color: #3c3c3c; }
 
-.table {
-    background-color: #333;
-    border-radius: 8px;
-    overflow: hidden;
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-}
+.btn-action { padding: 8px 18px; font-size: 0.9em; font-weight: 600; margin: 0 5px; border: none; border-radius: 6px; color: white; cursor: pointer; transition: all 0.2s ease; }
+.btn-action:hover { transform: translateY(-2px); opacity: 0.9; }
 
-.table th {
-    background-color: #2962FF; /* Fundo do cabeçalho azul da logo */
-    color: #ffffff;
-    font-weight: 600;
-    text-align: center;
-    padding: 15px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
+.btn-reset { background-color: #2962FF; }
+.btn-reset:hover { background-color: #0039cb; }
+.btn-delete { background-color: #c62828; }
+.btn-delete:hover { background-color: #b71c1c; }
+.btn-ban { background-color: #ef6c00; } /* Laranja para banir */
+.btn-ban:hover { background-color: #e65100; }
 
-.table td {
-    vertical-align: middle;
-    color: #e0e0e0; /* Cor do texto clara */
-    padding: 15px;
-    border-top: 1px solid #444;
-}
+.status-active { color: #b9f6ca; } /* Verde claro para ativo */
+.status-expired { color: #ff8a80; } /* Vermelho claro para expirado */
 
-tbody tr {
-    transition: background-color 0.2s ease-in-out;
-}
-
-tbody tr:hover {
-    background-color: #3c3c3c;
-}
-
-.btn-action {
-    padding: 8px 18px;
-    font-size: 0.95em;
-    font-weight: 600;
-    margin: 0 5px;
-    border: none;
-    border-radius: 6px;
-    color: white;
-    transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
-.btn-action:hover {
-    transform: translateY(-2px);
-    opacity: 0.9;
-}
-
-.btn-reset {
-    background-color: #2962FF; /* Botão de reset azul da logo */
-}
-
-.btn-reset:hover {
-    background-color: #0039cb; /* Azul mais escuro */
-}
-
-.btn-delete {
-    background-color: #d32f2f; /* Vermelho para exclusão */
-}
-
-.btn-delete:hover {
-    background-color: #b71c1c;
-}
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container">
-    <h2>Gerenciamento de Usuários</h2>
+    <h2>Gerenciamento de Usuários Ativos</h2>
     <div class="search-section">
         <input type="text" id="search-input" class="form-control" placeholder="Buscar por usuário...">
     </div>
@@ -128,12 +72,14 @@ tbody tr:hover {
             <tr>
                 <th>ID</th>
                 <th>Usuário</th>
-                <th>HWID Registrado</th>
-                <th>Status da Licença</th> <th>Ações</th>
+                <th>HWID</th>
+                <th>Status da Licença</th>
+                <th>Ações</th>
             </tr>
         </thead>
         <tbody id="users-table">
-            </tbody>
+            <!-- Conteúdo gerado via JS -->
+        </tbody>
     </table>
 </div>
 {% endblock %}
@@ -146,23 +92,19 @@ document.addEventListener('DOMContentLoaded', function () {
     const usersTable = document.getElementById('users-table');
 
     function loadUsers(query = '') {
-        const url = query ? `/users/search?query=${encodeURIComponent(query)}` : '/users';
-        fetch(url, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
-        })
+        // A API /users agora filtra para mostrar apenas os não-banidos por padrão
+        const url = query ? `/users?query=${encodeURIComponent(query)}` : '/users';
+        fetch(url)
         .then(response => response.json())
         .then(users => {
             usersTable.innerHTML = '';
             if (users.length === 0) {
-                // Colspan atualizado para 5 colunas
                 usersTable.innerHTML = `<tr><td colspan="5" style="text-align: center;">Nenhum usuário encontrado.</td></tr>`;
                 return;
             }
             users.forEach(user => {
                 const row = document.createElement('tr');
                 
-                // --- Lógica para formatar a data de expiração e status ---
                 let expirationCellHTML;
                 if (user.expiration_date) {
                     const expirationDate = new Date(user.expiration_date);
@@ -171,25 +113,23 @@ document.addEventListener('DOMContentLoaded', function () {
                     const formattedDate = expirationDate.toLocaleString('pt-BR', options);
 
                     if (now > expirationDate) {
-                        // Estilo para licença expirada
-                        expirationCellHTML = `<td style="color: #ff8a80; text-align: center;">Expirado<br><small>(${formattedDate})</small></td>`;
+                        expirationCellHTML = `<td class="status-expired" style="text-align: center;">Expirado<br><small>(${formattedDate})</small></td>`;
                     } else {
-                        // Estilo para licença ativa
-                        expirationCellHTML = `<td style="color: #b9f6ca; text-align: center;">Ativo<br><small>(${formattedDate})</small></td>`;
+                        expirationCellHTML = `<td class="status-active" style="text-align: center;">Ativo<br><small>(${formattedDate})</small></td>`;
                     }
                 } else {
                     expirationCellHTML = `<td style="text-align: center;">Sem Licença</td>`;
                 }
-                // --- Fim da lógica de formatação ---
 
                 row.innerHTML = `
                     <td style="text-align: center;">${user.id}</td>
                     <td style="text-align: center;">${user.username}</td>
-                    <td style="text-align: center;">${user.hwid || 'Não registrado'}</td>
+                    <td style="text-align: center; font-size: 0.9em; font-family: monospace;">${user.hwid || 'Não registrado'}</td>
                     ${expirationCellHTML}
                     <td style="text-align: center;">
-                        <button class="btn btn-reset btn-action" data-id="${user.id}">Resetar HWID</button>
-                        <button class="btn btn-delete btn-action" data-id="${user.id}">Excluir</button>
+                        <button class="btn-reset btn-action" data-id="${user.id}">Resetar HWID</button>
+                        <button class="btn-ban btn-action" data-id="${user.id}">Banir HWID</button>
+                        <button class="btn-delete btn-action" data-id="${user.id}">Excluir</button>
                     </td>
                 `;
                 usersTable.appendChild(row);
@@ -212,17 +152,23 @@ document.addEventListener('DOMContentLoaded', function () {
         const userId = target.dataset.id;
 
         if (target.classList.contains('btn-reset')) {
-            // Ação de resetar HWID (lógica existente mantida)
-            fetch(`/users/reset_hwid/${userId}`, {
-                method: 'POST'
-            }).then(() => loadUsers(searchInput.value));
+            fetch(`/users/reset_hwid/${userId}`, { method: 'POST' }).then(() => loadUsers(searchInput.value));
         }
 
         if (target.classList.contains('btn-delete')) {
-            // Ação de excluir usuário (lógica existente mantida)
-            if (confirm('Tem certeza que deseja excluir este usuário?')) {
-                fetch(`/admin/users/delete/${userId}`, {
-                    method: 'DELETE'
+            if (confirm('Tem certeza que deseja EXCLUIR este usuário? Esta ação é irreversível.')) {
+                fetch(`/admin/users/delete/${userId}`, { method: 'DELETE' }).then(() => loadUsers(searchInput.value));
+            }
+        }
+
+        // NOVA AÇÃO DE BANIR
+        if (target.classList.contains('btn-ban')) {
+            const reason = prompt("Digite o motivo do banimento (ex: 'Uso de cheat'). Este motivo será exibido ao usuário.");
+            if (reason) {
+                fetch(`/admin/users/ban/${userId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason: reason })
                 }).then(() => loadUsers(searchInput.value));
             }
         }
