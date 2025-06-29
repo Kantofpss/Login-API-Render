@@ -238,17 +238,26 @@ def api_login():
         if not data:
             return jsonify({'status': 'erro', 'mensagem': 'Dados da requisição ausentes.'}), 400
 
+        # --- CORREÇÃO: Usando os nomes de campo corretos e o método .get() para segurança ---
+        username = data.get('usuario')
+        password = data.get('senha') # Alterado de 'key' para 'senha'
+        hwid = data.get('hwid')
+        client_version = data.get('client_version')
+
+        if not all([username, password, hwid, client_version]):
+            return jsonify({'status': 'erro', 'mensagem': 'Campos obrigatórios ausentes: usuario, senha, hwid, client_version.'}), 400
+
         conn, cursor = conectar_banco()
 
         # 1. Checagem de Versão do Sistema
         cursor.execute("SELECT value FROM system_settings WHERE key = 'system_version'")
         required_version = (cursor.fetchone() or {}).get('value', '1.0')
-        if data.get('client_version') != required_version:
+        if client_version != required_version:
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': f'Versão desatualizada. Use a {required_version}.'}), 426
 
         # 2. Checagem do Usuário
-        cursor.execute('SELECT * FROM users WHERE username = ?', (data['usuario'],))
+        cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
         user = cursor.fetchone()
         
         if not user:
@@ -266,16 +275,16 @@ def api_login():
              return jsonify({'status': 'erro', 'mensagem': 'Seu tempo de acesso expirou.'}), 403
 
         # 5. Checagem de Senha
-        if not bcrypt.checkpw(data['key'].encode('utf-8'), user['password'].encode('utf-8')):
+        if not bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8')):
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Usuário ou senha inválidos.'}), 401
 
         # 6. Checagem e Vínculo de HWID
-        if user['hwid'] and user['hwid'] != data['hwid']:
+        if user['hwid'] and user['hwid'] != hwid:
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Licença vinculada a outro dispositivo.'}), 403
         elif not user['hwid']:
-            cursor.execute('UPDATE users SET hwid = ? WHERE username = ?', (data['hwid'], data['usuario']))
+            cursor.execute('UPDATE users SET hwid = ? WHERE username = ?', (hwid, username))
             conn.commit()
 
         conn.close()
