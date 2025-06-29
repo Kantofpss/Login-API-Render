@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 import bcrypt
 from datetime import datetime, timedelta, timezone
-import traceback # Import para detalhar o erro
+import traceback
 
 load_dotenv()
 app = Flask(__name__)
@@ -28,8 +28,7 @@ def conectar_banco():
         print(f"Erro ao conectar ao banco de dados: {e}")
         raise
 
-# --- Rotas do Painel de Administração e Autenticação (sem alterações) ---
-
+# --- Rotas do Painel de Administração e Autenticação ---
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
     if request.method == 'POST':
@@ -58,7 +57,7 @@ def admin_logout():
     session.pop('admin_logged_in', None)
     return redirect(url_for('admin_login'))
 
-# --- Rotas de Navegação do Painel (sem alterações) ---
+# --- Rotas de Navegação do Painel ---
 @app.route('/gerenciar-usuarios')
 def gerenciar_usuarios():
     if not session.get('admin_logged_in'): return redirect(url_for('admin_login'))
@@ -79,7 +78,7 @@ def configuracoes():
     if not session.get('admin_logged_in'): return redirect(url_for('admin_login'))
     return render_template('configuracoes.html')
 
-# --- API de Gerenciamento de Usuários (sem alterações) ---
+# --- API de Gerenciamento de Usuários ---
 @app.route('/users', methods=['GET'])
 def get_users():
     if not session.get('admin_logged_in'): 
@@ -130,7 +129,7 @@ def create_user():
         print(f"ERRO AO CRIAR USUÁRIO: {e}")
         return jsonify({'message': 'Ocorreu um erro interno no servidor.'}), 500
 
-# Rotas de ban, unban, reset_hwid, delete (sem alterações)
+# Rotas de ban, unban, reset_hwid, delete
 @app.route('/admin/users/ban/<int:user_id>', methods=['POST'])
 def ban_user(user_id):
     if not session.get('admin_logged_in'): return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
@@ -181,8 +180,6 @@ def report_violation():
     conn.close()
     return jsonify({'status': 'sucesso', 'message': 'Violação reportada com sucesso.'}), 200
 
-
-# --- ROTA DE LOGIN MODIFICADA PARA DEPURACAO ---
 @app.route('/api/login', methods=['POST'])
 def api_login():
     try:
@@ -200,12 +197,15 @@ def api_login():
 
         conn, cursor = conectar_banco()
 
+        # 1. Checagem de Versão do Sistema (CORRIGIDO)
         cursor.execute("SELECT value FROM system_settings WHERE key = 'system_version'")
-        required_version = (cursor.fetchone() or {}).get('value', '1.0')
+        version_row = cursor.fetchone()
+        required_version = version_row['value'] if version_row else '1.0'
         if client_version != required_version:
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': f'Versão desatualizada. Use a {required_version}.'}), 426
 
+        # 2. Checagem do Usuário
         cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
         user = cursor.fetchone()
         
@@ -213,18 +213,22 @@ def api_login():
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Usuário ou senha inválidos.'}), 401
 
+        # 3. Checagem de Banimento
         if user['is_banned']:
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': f"ACESSO BLOQUEADO. Motivo: {user['ban_reason']}"}), 403
 
+        # 4. Checagem do Tempo de Acesso
         if not user['expiration_date'] or datetime.now(timezone.utc) > datetime.fromisoformat(user['expiration_date']):
              conn.close()
              return jsonify({'status': 'erro', 'mensagem': 'Seu tempo de acesso expirou.'}), 403
 
+        # 5. Checagem de Senha
         if not user['password'] or not bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8')):
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Usuário ou senha inválidos.'}), 401
 
+        # 6. Checagem e Vínculo de HWID
         if user['hwid'] and user['hwid'] != hwid:
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Licença vinculada a outro dispositivo.'}), 403
@@ -240,19 +244,15 @@ def api_login():
         }), 200
 
     except Exception as e:
-        # --- ALTERAÇÃO IMPORTANTE ---
-        # Imprime o erro detalhado no console do servidor
         print("--- ERRO DETALHADO NO /api/login ---")
         traceback.print_exc()
         print("------------------------------------")
-        
-        # Retorna o erro específico para o cliente para podermos ver
         return jsonify({
             'status': 'erro', 
             'mensagem': f"ERRO INTERNO NO SERVIDOR: {str(e)}"
         }), 500
 
-# Rota de system-settings (sem alterações)
+# Rota de system-settings
 @app.route('/api/system-settings', methods=['GET', 'POST'])
 def system_settings():
     if request.method == 'POST':
