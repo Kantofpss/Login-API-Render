@@ -5,145 +5,147 @@
 {% block styles %}
 {{ super() }}
 <style>
-.container {
-    max-width: 800px;
-    margin: 50px auto;
-    padding: 30px;
-    background-color: #2a2a2a;
-    border-radius: 10px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-}
-
-h2 {
-    color: #2962FF; /* Azul da logo */
-    text-align: center;
-    margin-bottom: 30px;
-    font-size: 2.2em;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-}
-
-.status-section {
-    background-color: #333;
-    padding: 25px;
-    border-radius: 8px;
-    border: 1px solid #444;
-    margin-bottom: 20px;
-    text-align: center;
-}
-
-.status-section h4 {
-    color: #ffffff; /* Azul da logo */
-    margin-bottom: 15px;
-    font-size: 1.5em;
-}
-
-.status-section p {
-    font-size: 1.2em;
-    margin: 0 0 25px;
-}
-
-#system-status {
-    font-weight: bold;
-    padding: 5px 10px;
-    border-radius: 5px;
-}
-
-#system-status.online {
-    color: #fff;
-    background-color: #4caf50; /* Verde para online */
-}
-
-#system-status.offline {
-    color: #fff;
-    background-color: #f44336; /* Vermelho para offline */
-}
-
-#toggle-status-btn {
-    background-color: #2962FF; /* Azul da logo */
-    color: #fff; /* Cor do texto branca para contraste */
-    border: none;
-    padding: 12px 25px;
-    font-size: 1.1em;
-    font-weight: bold;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.3s ease, transform 0.2s ease;
-    text-transform: uppercase;
-}
-
-#toggle-status-btn:hover {
-    background-color: #0039cb; /* Tom de azul mais escuro para hover */
-    transform: translateY(-2px);
-}
-
-#toggle-status-btn:active {
-    transform: translateY(0);
-}
+    .status-container {
+        margin: 20px 0;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+    }
+    .status-text {
+        font-weight: bold;
+        color: #333;
+    }
+    .error {
+        color: red;
+        font-weight: bold;
+    }
+    .success {
+        color: green;
+        font-weight: bold;
+    }
+    button {
+        padding: 10px 20px;
+        margin: 5px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        background-color: #007bff;
+        color: white;
+        font-size: 16px;
+    }
+    button:hover {
+        background-color: #0056b3;
+    }
+    button:disabled {
+        background-color: #6c757d;
+        cursor: not-allowed;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container">
     <h2>Configurações do Sistema</h2>
-    <div class="status-section">
-        <h4>Status do Sistema de Login</h4>
-        <p>Status Atual: <span id="system-status">Carregando...</span></p>
-        <button id="toggle-status-btn" class="btn">Mudar Status</button>
+    
+    <div class="status-container">
+        <h3>Status do Sistema de Login</h3>
+        <p>Status Atual: <span id="system-status" class="status-text">Carregando...</span></p>
+        <button onclick="changeStatus('online')">Ativar Sistema</button>
+        <button onclick="changeStatus('offline')">Desativar Sistema</button>
     </div>
+
+    <div class="status-container">
+        <h3>Manter Servidor Ativo (Nunca Dormir)</h3>
+        <p>Status Atual: <span id="never-sleep" class="status-text">Carregando...</span></p>
+        <button onclick="changeNeverSleep('true')">Ativar Nunca Dormir</button>
+        <button onclick="changeNeverSleep('false')">Desativar Nunca Dormir</button>
+    </div>
+
+    <p id="message"></p>
 </div>
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
 <script>
-// O JavaScript permanece o mesmo
-document.addEventListener('DOMContentLoaded', function () {
-    const statusElement = document.getElementById('system-status');
-    const toggleButton = document.getElementById('toggle-status-btn');
+    function fetchSettings() {
+        console.log('Buscando configurações...');
+        fetch('/api/system-settings')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Configurações recebidas:', data);
+                document.getElementById('system-status').textContent = data.system_status ? data.system_status.toUpperCase() : 'DESCONHECIDO';
+                document.getElementById('never-sleep').textContent = data.never_sleep === 'true' ? 'ATIVADO' : 'DESATIVADO';
+                document.getElementById('message').className = 'success';
+                document.getElementById('message').textContent = 'Configurações carregadas com sucesso.';
+            })
+            .catch(error => {
+                console.error('Erro ao carregar configurações:', error);
+                document.getElementById('message').className = 'error';
+                document.getElementById('message').textContent = 'Erro ao carregar configurações: ' + error.message;
+            });
+    }
 
-    function fetchSystemStatus() {
-        fetch('/api/system-status', {
-            method: 'GET',
-            headers: {'Content-Type': 'application/json'}
+    function changeStatus(status) {
+        console.log('Alterando status do sistema para:', status);
+        fetch('/api/system-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ system_status: status })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
-            const isOnline = data.status === 'online';
-            statusElement.textContent = isOnline ? 'Online' : 'Offline';
-            statusElement.classList.remove('online', 'offline');
-            statusElement.classList.add(isOnline ? 'online' : 'offline');
-            toggleButton.textContent = isOnline ? 'Desligar Sistema' : 'Ligar Sistema';
+            console.log('Resposta da alteração de status:', data);
+            document.getElementById('message').className = 'success';
+            document.getElementById('message').textContent = data.message;
+            fetchSettings();
         })
         .catch(error => {
-            console.error('Erro ao buscar status:', error);
-            statusElement.textContent = 'Erro';
-            statusElement.classList.remove('online');
-            statusElement.classList.add('offline');
+            console.error('Erro ao atualizar status:', error);
+            document.getElementById('message').className = 'error';
+            document.getElementById('message').textContent = 'Erro ao atualizar status: ' + error.message;
         });
     }
 
-    fetchSystemStatus();
-
-    toggleButton.addEventListener('click', function () {
-        const isCurrentlyOnline = statusElement.classList.contains('online');
-        const newStatus = isCurrentlyOnline ? 'offline' : 'online';
-
-        fetch('/api/system-status', {
+    function changeNeverSleep(neverSleep) {
+        console.log('Alterando never_sleep para:', neverSleep);
+        fetch('/api/system-settings', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ status: newStatus })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ never_sleep: neverSleep })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
-            alert(data.message);
-            fetchSystemStatus();
+            console.log('Resposta da alteração de never_sleep:', data);
+            document.getElementById('message').className = 'success';
+            document.getElementById('message').textContent = data.message;
+            fetchSettings();
         })
         .catch(error => {
-            console.error('Erro ao mudar status:', error);
-            alert('Erro ao mudar o status do sistema.');
+            console.error('Erro ao atualizar never_sleep:', error);
+            document.getElementById('message').className = 'error';
+            document.getElementById('message').textContent = 'Erro ao atualizar never_sleep: ' + error.message;
         });
-    });
-});
+    }
+
+    window.onload = () => {
+        console.log('Página carregada, iniciando fetchSettings...');
+        fetchSettings();
+    };
 </script>
 {% endblock %}
