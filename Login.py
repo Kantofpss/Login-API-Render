@@ -8,9 +8,7 @@ from colorama import *
 
 init(autoreset=True)
 
-# --- NOVAS LINHAS ADICIONADAS ---
-CLIENT_VERSION = "1.0"  # Versão deste cliente. Mude para "2.0" para um login bem-sucedido.
-# --------------------------------
+CLIENT_VERSION = "2.0"  # Versão deste cliente. Mude para a versão esperada pelo servidor.
 
 CHAVE_VERIFICACAO = os.environ.get('VERIFICATION_KEY', 'em-uma-noite-escura-as-corujas-observam-42')
 CRAFT_URL = os.environ.get('CRAFT_URL', 'https://login-netfly.onrender.com')
@@ -28,7 +26,20 @@ def verificar_debugger():
         time.sleep(1)
         os._exit(1)
 
-# --- NOVA FUNÇÃO ADICIONADA ---
+# --- NOVA FUNÇÃO ADICIONADA: Calcula o hash do próprio executável ---
+def calculate_self_hash():
+    """Calcula o SHA256 hash do próprio executável em tempo de execução."""
+    try:
+        # sys.executable retorna o caminho para o executável atual.
+        # Em um script .py, é o interpretador. Em um PyInstaller .exe, é o .exe.
+        with open(sys.executable, 'rb') as f:
+            bytes_content = f.read()
+            return hashlib.sha256(bytes_content).hexdigest()
+    except Exception as e:
+        print(f"{Cores.ERRO}Erro ao calcular hash do executável: {e}")
+        return "HASH_ERROR"
+# ------------------------------------------------------------------
+
 def pre_login_check():
     """Verifica o status do sistema e a versão antes de prosseguir."""
     limpar_tela()
@@ -94,7 +105,7 @@ def exibir_banner_principal():
     info = f"""
 {Cores.BORDA}======================================================
 {Cores.STATUS}[*] Auth System        : {Cores.SUCESSO}Online Server
-{Cores.STATUS}[*] Security Source    : {Cores.SUCESSO}HWID Lock
+{Cores.STATUS}[*] Security Source    : {Cores.SUCESSO}HWID Lock & Client Hash
 {Cores.STATUS}[*] Client Version     : {Cores.BRANCO}{CLIENT_VERSION}
 {Cores.BORDA}======================================================
 """
@@ -119,11 +130,14 @@ def tela_de_login_servidor():
         usuario_input = input(f"{Cores.PROMPT}[?] Digite seu usuário: {Cores.INPUT}")
         key_input = input(f"{Cores.PROMPT}[?] Digite sua senha: {Cores.INPUT}")
         hwid_atual = get_hwid()
+        client_exe_hash = calculate_self_hash() # Calcula o hash do executável
+
         dados_de_login = {
             "usuario": usuario_input,
             "key": key_input,
             "hwid": hwid_atual,
-            "verification_key": CHAVE_VERIFICACAO
+            "verification_key": CHAVE_VERIFICACAO,
+            "client_hash": client_exe_hash # Envia o hash do executável
         }
         print(f"\n{Cores.INFO}[*] Conectando ao servidor de autenticação...")
         response = requests.post(URL_LOGIN, json=dados_de_login, timeout=60)
@@ -188,10 +202,8 @@ def tela_logado(nome_usuario):
             os._exit(0)
 
 def main():
-    # --- CHAMADAS DE FUNÇÃO ATUALIZADAS ---
     verificar_debugger()
-    pre_login_check()  # <-- Nova verificação executada aqui
-    # ------------------------------------
+    pre_login_check() # Verifica status e versão antes de exibir o menu
     
     while True:
         limpar_tela()

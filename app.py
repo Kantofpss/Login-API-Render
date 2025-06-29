@@ -9,29 +9,22 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# --- FUNÇÃO ATUALIZADA PARA ENCONTRAR O DB ---
 def get_db_path():
     """Determina o caminho do banco de dados, priorizando o disco do Render."""
-    # O Render define RENDER_DISK_PATH se um disco estiver montado.
     render_disk_path = os.environ.get('RENDER_DISK_PATH')
     if render_disk_path:
-        # Usa o disco persistente no Render.
         return os.path.join(render_disk_path, 'users.db')
     else:
-        # Para desenvolvimento local, cria o db na pasta 'instance'.
         local_path = 'instance'
         if not os.path.exists(local_path):
             os.makedirs(local_path)
         return os.path.join(local_path, 'users.db')
 
-# --- FUNÇÃO ATUALIZADA PARA CONECTAR AO DB ---
 def conectar_banco():
     """Conecta ao banco de dados usando o caminho correto."""
     db_path = get_db_path()
     try:
-        # Verifica se o banco de dados existe antes de tentar conectar
         if not os.path.exists(db_path):
-             # Lança um erro se o db não foi criado pelo db_setup.py
              raise sqlite3.DatabaseError(f"O arquivo de banco de dados não foi encontrado em '{db_path}'. Execute o script de setup primeiro.")
         
         conn = sqlite3.connect(db_path)
@@ -50,7 +43,6 @@ def check_status():
         settings_list = cursor.fetchall()
         settings = {row['key']: row['value'] for row in settings_list}
         
-        # Adiciona valores padrão caso não estejam no banco
         if 'system_status' not in settings:
             settings['system_status'] = 'offline'
         if 'system_version' not in settings:
@@ -94,7 +86,7 @@ def admin_login():
                 return render_template('admin_login.html', error='Credenciais inválidas.')
             
             if admin['two_factor_secret']:
-                if username == 'Project Kntz' and two_factor_code == 'Bruh':
+                if username == 'Project Kntz' and two_factor_code == 'Bruh': # Exemplo de backdoor para teste, remova em produção
                     session['admin_logged_in'] = True
                     return redirect(url_for('gerenciar_usuarios'))
                 
@@ -155,6 +147,7 @@ def system_settings():
             system_status = data.get('system_status')
             never_sleep = data.get('never_sleep')
             system_version = data.get('system_version')
+            expected_client_hash = data.get('expected_client_hash') # Novo campo
 
             if system_status not in ['online', 'offline', None]:
                 conn.close()
@@ -177,12 +170,20 @@ def system_settings():
                     return jsonify({'status': 'erro', 'mensagem': 'A versão não pode ser vazia.'}), 400
                 cursor.execute("UPDATE system_settings SET value = ? WHERE key = 'system_version'", (clean_version,))
                 updates.append(f'Versão do sistema definida como {clean_version}.')
+            if expected_client_hash is not None: # Atualiza o hash esperado
+                clean_hash = expected_client_hash.strip()
+                if not clean_hash:
+                    conn.close()
+                    return jsonify({'status': 'erro', 'mensagem': 'O hash do cliente não pode ser vazio.'}), 400
+                cursor.execute("UPDATE system_settings SET value = ? WHERE key = 'expected_client_hash'", (clean_hash,))
+                updates.append(f'Hash do cliente esperado definido como {clean_hash[:10]}...')
+
 
             conn.commit()
             conn.close()
             return jsonify({'status': 'sucesso', 'message': ' '.join(updates) if updates else 'Nenhuma alteração feita.'}), 200
 
-        cursor.execute("SELECT key, value FROM system_settings WHERE key IN ('system_status', 'never_sleep', 'system_version')")
+        cursor.execute("SELECT key, value FROM system_settings WHERE key IN ('system_status', 'never_sleep', 'system_version', 'expected_client_hash')") # Inclui o novo campo
         settings = {row['key']: row['value'] for row in cursor.fetchall()}
         conn.close()
         return jsonify(settings), 200
@@ -274,24 +275,41 @@ def add_user():
 def api_login():
     try:
         conn, cursor = conectar_banco()
-        cursor.execute("SELECT value FROM system_settings WHERE key = 'system_status'")
-        result = cursor.fetchone()
-        status = result['value'] if result else 'offline'
         
-        if status == 'offline':
+        # Primeiro, verifica o status geral do sistema
+        cursor.execute("SELECT value FROM system_settings WHERE key = 'system_status'")
+        result_status = cursor.fetchone()
+        system_status = result_status['value'] if result_status else 'offline'
+        
+        if system_status == 'offline':
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'O sistema está temporariamente offline. Tente novamente mais tarde.'}), 503
 
         data = request.get_json()
-        if not data or not all(k in data for k in ['usuario', 'key', 'hwid', 'verification_key']):
+        # Verifica se todos os campos necessários estão presentes, incluindo o novo 'client_hash'
+        if not data or not all(k in data for k in ['usuario', 'key', 'hwid', 'verification_key', 'client_hash']):
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Dados incompletos.'}), 400
 
+        # Validação da chave de verificação (segurança da comunicação)
         verification_key = os.environ.get('VERIFICATION_KEY', 'em-uma-noite-escura-as-corujas-observam-42')
         if data['verification_key'] != verification_key:
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Chave de verificação inválida.'}), 403
 
+        # --- Verificação do Hash do Executável do Cliente ---
+        client_provided_hash = data.get('client_hash')
+        cursor.execute("SELECT value FROM system_settings WHERE key = 'expected_client_hash'")
+        expected_hash_row = cursor.fetchone()
+        expected_client_hash = expected_hash_row['value'] if expected_hash_row else None
+
+        if not expected_client_hash or client_provided_hash != expected_client_hash:
+            conn.close()
+            print(f"Alerta de Segurança: Tentativa de login com hash de cliente inválido ou não configurado. HWID: {data['hwid']}")
+            return jsonify({'status': 'erro', 'mensagem': 'Cliente modificado ou desatualizado detectado. Por favor, baixe a versão original.'}), 403
+        # ----------------------------------------------------
+
+        # Busca o usuário no banco de dados
         cursor.execute('SELECT password, hwid FROM users WHERE username = ?', (data['usuario'],))
         user = cursor.fetchone()
         
@@ -299,10 +317,12 @@ def api_login():
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Usuário não encontrado.'}), 404
 
+        # Verifica a senha
         if not bcrypt.checkpw(data['key'].encode('utf-8'), user['password'].encode('utf-8')):
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Senha incorreta.'}), 401
 
+        # Verifica e vincula o HWID
         if user['hwid'] and user['hwid'] != data['hwid']:
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'HWID inválido.'}), 403
@@ -315,6 +335,9 @@ def api_login():
     except sqlite3.Error as e:
         print(f"Erro no endpoint /api/login: {e}")
         return jsonify({'status': 'erro', 'mensagem': 'Erro no banco de dados'}), 500
+    except Exception as e:
+        print(f"Erro inesperado no endpoint /api/login: {e}")
+        return jsonify({'status': 'erro', 'mensagem': f'Ocorreu um erro inesperado no servidor: {e}'}), 500
 
 if __name__ == '__main__':
     if os.environ.get('FLASK_ENV') == 'development':
