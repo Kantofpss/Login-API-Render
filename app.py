@@ -38,7 +38,6 @@ def admin_login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        # O campo e a lógica do Two Factor Code foram removidos daqui.
         try:
             conn, cursor = conectar_banco()
             cursor.execute('SELECT password FROM admins WHERE username = ?', (username,))
@@ -91,14 +90,23 @@ def configuracoes():
 
 @app.route('/users', methods=['GET'])
 def get_users():
-    """Retorna a lista de usuários, incluindo a data de expiração."""
+    """Retorna a lista de usuários, com suporte para busca."""
     if not session.get('admin_logged_in'):
         return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
+    
+    query = request.args.get('query', '')
     conn, cursor = conectar_banco()
-    cursor.execute('SELECT id, username, hwid, expiration_date FROM users ORDER BY id DESC')
+
+    if query:
+        # Modificado para permitir busca pelo username
+        cursor.execute('SELECT id, username, hwid, expiration_date FROM users WHERE username LIKE ? ORDER BY id DESC', ('%' + query + '%',))
+    else:
+        cursor.execute('SELECT id, username, hwid, expiration_date FROM users ORDER BY id DESC')
+    
     users = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return jsonify(users), 200
+
 
 @app.route('/admin/users', methods=['POST'])
 def add_user():
@@ -202,7 +210,6 @@ def api_login():
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Usuário ou senha inválidos.'}), 404
 
-        # --- VERIFICAÇÃO DE TEMPO DE ACESSO ---
         if not user['expiration_date']:
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Sua conta não possui uma licença ativa. Contate o suporte.'}), 403
@@ -211,7 +218,6 @@ def api_login():
         if datetime.now(timezone.utc) > expiration_time:
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Seu tempo de acesso esgotou.'}), 403
-        # -----------------------------------------
 
         if not bcrypt.checkpw(data['key'].encode('utf-8'), user['password'].encode('utf-8')):
             conn.close()
@@ -230,6 +236,41 @@ def api_login():
     except Exception as e:
         print(f"ERRO INESPERADO EM /api/login: {e}")
         return jsonify({'status': 'erro', 'mensagem': 'Ocorreu um erro inesperado no servidor.'}), 500
+
+# --- [NOVO] API PARA CONFIGURAÇÕES DO SISTEMA ---
+@app.route('/api/system-settings', methods=['GET', 'POST'])
+def system_settings():
+    if not session.get('admin_logged_in'):
+        return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
+
+    conn, cursor = conectar_banco()
+    
+    if request.method == 'GET':
+        try:
+            cursor.execute('SELECT key, value FROM system_settings')
+            settings = {row['key']: row['value'] for row in cursor.fetchall()}
+            conn.close()
+            return jsonify(settings), 200
+        except Exception as e:
+            conn.close()
+            return jsonify({'status': 'erro', 'mensagem': f'Erro ao buscar configurações: {e}'}), 500
+
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'status': 'erro', 'mensagem': 'Nenhum dado enviado.'}), 400
+            
+            for key, value in data.items():
+                cursor.execute('UPDATE system_settings SET value = ? WHERE key = ?', (value, key))
+
+            conn.commit()
+            conn.close()
+            return jsonify({'status': 'sucesso', 'message': 'Configurações atualizadas com sucesso!'}), 200
+        except Exception as e:
+            conn.close()
+            return jsonify({'status': 'erro', 'mensagem': f'Erro ao atualizar configurações: {e}'}), 500
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
