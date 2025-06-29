@@ -3,7 +3,6 @@ import sqlite3
 import os
 from dotenv import load_dotenv
 import bcrypt
-import pyotp
 from datetime import datetime, timedelta, timezone
 
 load_dotenv()
@@ -33,32 +32,38 @@ def conectar_banco():
         raise
 
 # --- Rotas do Painel de Administração ---
+
+# --- MODIFICADO: Rota de login do admin simplificada, sem 2FA ---
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        two_factor_code = request.form['two_factor_code']
         try:
             conn, cursor = conectar_banco()
-            cursor.execute('SELECT password, two_factor_secret FROM admins WHERE username = ?', (username,))
+            # A query agora busca apenas a senha
+            cursor.execute('SELECT password FROM admins WHERE username = ?', (username,))
             admin = cursor.fetchone()
             conn.close()
             
+            # Verificação simples de usuário e senha
             if admin and bcrypt.checkpw(password.encode('utf-8'), admin['password'].encode('utf-8')):
-                if admin['two_factor_secret']:
-                    totp = pyotp.TOTP(admin['two_factor_secret'])
-                    if not totp.verify(two_factor_code):
-                        return render_template('admin_login.html', error='Código 2FA inválido.')
                 session['admin_logged_in'] = True
-                return redirect(url_for('gerenciar_usuarios'))
+                return redirect(url_for('dashboard')) # Redireciona para o dashboard
+            
+            # Se a autenticação falhar
             return render_template('admin_login.html', error='Credenciais inválidas.')
         except Exception as e:
-            return render_template('admin_login.html', error=f'Erro no servidor: {e}')
+            print(f"Erro no login do admin: {e}")
+            return render_template('admin_login.html', error='Ocorreu um erro no servidor.')
+    
+    # Exibe a página de login para requisições GET
     return render_template('admin_login.html')
 
 @app.route('/')
 def home():
+    if session.get('admin_logged_in'):
+        return redirect(url_for('dashboard'))
     return redirect(url_for('admin_login'))
 
 @app.route('/admin/dashboard')
@@ -72,6 +77,7 @@ def admin_logout():
     session.pop('admin_logged_in', None)
     return redirect(url_for('admin_login'))
 
+# O resto das rotas do painel permanecem as mesmas
 @app.route('/gerenciar-usuarios')
 def gerenciar_usuarios():
     if not session.get('admin_logged_in'):
@@ -90,13 +96,11 @@ def configuracoes():
         return redirect(url_for('admin_login'))
     return render_template('configuracoes.html')
 
-# --- API para Gerenciamento de Usuários (com sistema de tempo) ---
-
+# --- API para Gerenciamento de Usuários (sem alterações) ---
 @app.route('/users', methods=['GET'])
 def get_users():
     """Retorna a lista de usuários, incluindo a data de expiração."""
-    if not session.get('admin_logged_in'):
-        return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
+    if not session.get('admin_logged_in'): return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
     conn, cursor = conectar_banco()
     cursor.execute('SELECT id, username, hwid, expiration_date FROM users ORDER BY id DESC')
     users = [dict(row) for row in cursor.fetchall()]
@@ -106,25 +110,17 @@ def get_users():
 @app.route('/admin/users', methods=['POST'])
 def add_user():
     """Adiciona um novo usuário com um tempo de acesso definido em dias."""
-    if not session.get('admin_logged_in'):
-        return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
-    
+    if not session.get('admin_logged_in'): return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
     data = request.get_json()
     username, password, access_days = data.get('username'), data.get('password'), data.get('access_days')
-
-    if not all([username, password, access_days]):
-        return jsonify({'status': 'erro', 'mensagem': 'Todos os campos são obrigatórios.'}), 400
-    
+    if not all([username, password, access_days]): return jsonify({'status': 'erro', 'mensagem': 'Todos os campos são obrigatórios.'}), 400
     try:
         days = int(access_days)
-        if days <= 0:
-            raise ValueError()
+        if days <= 0: raise ValueError()
         expiration_date = datetime.now(timezone.utc) + timedelta(days=days)
     except (ValueError, TypeError):
         return jsonify({'status': 'erro', 'mensagem': 'A quantidade de dias deve ser um número positivo.'}), 400
-
     hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    
     try:
         conn, cursor = conectar_banco()
         cursor.execute('INSERT INTO users (username, password, expiration_date) VALUES (?, ?, ?)', (username, hashed_password, expiration_date.isoformat()))
@@ -139,32 +135,25 @@ def add_user():
 @app.route('/users/extend_access/<int:user_id>', methods=['POST'])
 def extend_access(user_id):
     """Estende o tempo de acesso de um usuário."""
-    if not session.get('admin_logged_in'):
-        return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
-
+    if not session.get('admin_logged_in'): return jsonify({'status': 'erro', 'mensagem': 'Acesso não autorizado'}), 401
     try:
         days_to_add = int(request.json.get('days_to_add'))
         if days_to_add <= 0: raise ValueError()
     except (ValueError, TypeError):
         return jsonify({'status': 'erro', 'mensagem': 'Número de dias inválido.'}), 400
-
     conn, cursor = conectar_banco()
     cursor.execute('SELECT expiration_date FROM users WHERE id = ?', (user_id,))
     user = cursor.fetchone()
-
     if not user:
         conn.close()
         return jsonify({'status': 'erro', 'mensagem': 'Usuário não encontrado.'}), 404
-    
     now = datetime.now(timezone.utc)
     current_expiration = datetime.fromisoformat(user['expiration_date']) if user['expiration_date'] else now
     start_date = max(now, current_expiration)
     new_expiration_date = start_date + timedelta(days=days_to_add)
-    
     cursor.execute('UPDATE users SET expiration_date = ? WHERE id = ?', (new_expiration_date.isoformat(), user_id))
     conn.commit()
     conn.close()
-    
     return jsonify({'status': 'sucesso', 'message': f'Acesso estendido por {days_to_add} dias.'}), 200
 
 @app.route('/users/reset_hwid/<int:user_id>', methods=['POST'])
@@ -185,51 +174,39 @@ def delete_user(user_id):
     conn.close()
     return jsonify({'status': 'sucesso', 'message': 'Usuário excluído com sucesso'}), 200
 
-# --- API de Login do Cliente (com verificação de tempo) ---
-
+# --- API de Login do Cliente (sem alterações) ---
 @app.route('/api/login', methods=['POST'])
 def api_login():
     """Valida o login do cliente, incluindo a verificação da data de expiração."""
     try:
         conn, cursor = conectar_banco()
         data = request.get_json()
-
         if not data or not all(k in data for k in ['usuario', 'key', 'hwid']):
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Dados da requisição incompletos.'}), 400
-
         cursor.execute('SELECT password, hwid, expiration_date FROM users WHERE username = ?', (data['usuario'],))
         user = cursor.fetchone()
-        
         if not user:
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Usuário ou senha inválidos.'}), 404
-
-        # --- VERIFICAÇÃO DE TEMPO DE ACESSO ---
         if not user['expiration_date']:
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Sua conta não possui uma licença ativa. Contate o suporte.'}), 403
-
         expiration_time = datetime.fromisoformat(user['expiration_date'])
         if datetime.now(timezone.utc) > expiration_time:
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Seu tempo de acesso esgotou.'}), 403
-        # -----------------------------------------
-
         if not bcrypt.checkpw(data['key'].encode('utf-8'), user['password'].encode('utf-8')):
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Usuário ou senha inválidos.'}), 401
-
         if user['hwid'] and user['hwid'] != data['hwid']:
             conn.close()
             return jsonify({'status': 'erro', 'mensagem': 'Acesso negado. A licença está vinculada a outro dispositivo.'}), 403
         elif not user['hwid']:
             cursor.execute('UPDATE users SET hwid = ? WHERE username = ?', (data['hwid'], data['usuario']))
             conn.commit()
-
         conn.close()
         return jsonify({'status': 'sucesso', 'mensagem': 'Login bem-sucedido!'}), 200
-    
     except Exception as e:
         print(f"ERRO INESPERADO EM /api/login: {e}")
         return jsonify({'status': 'erro', 'mensagem': 'Ocorreu um erro inesperado no servidor.'}), 500

@@ -1,213 +1,105 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Login</title>
-    <link rel="icon" href="static/Logo.png" type="image/png">
+    <title>Login do Administrador</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
-        html {
-            height: 100%;
-        }
         body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #1e1e1e;
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
             margin: 0;
-            padding: 0;
-            font-family: sans-serif;
-            /* Paleta de cores atualizada: Preto e Cinza */
-            background: linear-gradient(#2a2a2a, #1a1a1a);
         }
-
-        .login-box {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 400px;
+        .login-container {
+            width: 100%;
+            max-width: 400px;
             padding: 40px;
-            transform: translate(-50%, -50%);
-            background: rgba(0,0,0,.7);
-            box-sizing: border-box;
-            box-shadow: 0 15px 25px rgba(0,0,0,.6);
-            border-radius: 10px;
-        }
-
-        /* Estilo para o Logo */
-        .login-box .logo {
-            display: block;
-            margin: 0 auto 25px; /* Centraliza o logo e adiciona espaço abaixo */
-            width: 150px; /* Largura do logo */
-            border-radius: 15px; /* Bordas arredondadas para o logo */
-        }
-
-        .login-box h2 {
-            margin: 0 0 30px;
-            padding: 0;
-            color: #fff;
+            background-color: #2a2a2a;
+            border-radius: 15px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
             text-align: center;
         }
-
-        .login-box .user-box {
-            position: relative;
-        }
-
-        .login-box .user-box input {
-            width: 100%;
-            padding: 10px 0;
-            font-size: 16px;
-            color: #fff;
+        h2 {
+            color: #2962FF;
             margin-bottom: 30px;
-            border: none;
-            border-bottom: 1px solid #fff;
-            outline: none;
-            background: transparent;
-        }
-        .login-box .user-box label {
-            position: absolute;
-            top: 0;
-            left: 0;
-            padding: 10px 0;
-            font-size: 16px;
-            color: #fff;
-            pointer-events: none;
-            transition: .5s;
-        }
-
-        /* Cor de destaque AZUL para o label */
-        .login-box .user-box input:focus ~ label,
-        .login-box .user-box input:valid ~ label {
-            top: -20px;
-            left: 0;
-            color: #00A3FF;
-            font-size: 12px;
-        }
-
-        .login-box form a {
-            position: relative;
-            display: inline-block;
-            padding: 10px 20px;
-            /* Cor de destaque AZUL para o botão */
-            color: #00A3FF;
-            font-size: 16px;
-            text-decoration: none;
+            font-size: 2em;
             text-transform: uppercase;
-            overflow: hidden;
-            transition: .5s;
-            margin-top: 40px;
-            letter-spacing: 4px;
-            border-radius: 5px; /* Bordas arredondadas no botão */
+            letter-spacing: 1px;
         }
-
-        /* Efeito hover AZUL para o botão */
-        .login-box a:hover {
-            background: #00A3FF;
-            color: #fff;
-            box-shadow: 0 0 5px #00A3FF,
-                        0 0 25px #00A3FF,
-                        0 0 50px #00A3FF,
-                        0 0 100px #00A3FF;
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
         }
-
-        .login-box a span {
-            position: absolute;
+        label {
             display: block;
+            margin-bottom: 8px;
+            color: #ccc;
+            font-weight: 500;
         }
-
-        /* Animação do botão com a cor AZUL */
-        .login-box a span:nth-child(1) {
-            top: 0;
-            left: -100%;
+        input {
             width: 100%;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, #00A3FF);
-            animation: btn-anim1 1s linear infinite;
+            padding: 12px;
+            background-color: #333;
+            border: 1px solid #555;
+            border-radius: 6px;
+            color: #e0e0e0;
+            box-sizing: border-box;
+            font-size: 1em;
         }
-
-        @keyframes btn-anim1 {
-            0% { left: -100%; }
-            50%,100% { left: 100%; }
+        input:focus {
+            outline: none;
+            border-color: #2962FF;
         }
-
-        .login-box a span:nth-child(2) {
-            top: -100%;
-            right: 0;
-            width: 2px;
-            height: 100%;
-            background: linear-gradient(180deg, transparent, #00A3FF);
-            animation: btn-anim2 1s linear infinite;
-            animation-delay: .25s;
-        }
-
-        @keyframes btn-anim2 {
-            0% { top: -100%; }
-            50%,100% { top: 100%; }
-        }
-
-        .login-box a span:nth-child(3) {
-            bottom: 0;
-            right: -100%;
+        button {
             width: 100%;
-            height: 2px;
-            background: linear-gradient(270deg, transparent, #00A3FF);
-            animation: btn-anim3 1s linear infinite;
-            animation-delay: .5s;
+            padding: 14px;
+            margin-top: 10px;
+            background-color: #2962FF;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
         }
-
-        @keyframes btn-anim3 {
-            0% { right: -100%; }
-            50%,100% { right: 100%; }
+        button:hover {
+            background-color: #0039cb;
         }
-
-        .login-box a span:nth-child(4) {
-            bottom: -100%;
-            left: 0;
-            width: 2px;
-            height: 100%;
-            background: linear-gradient(360deg, transparent, #00A3FF);
-            animation: btn-anim4 1s linear infinite;
-            animation-delay: .75s;
-        }
-
-        @keyframes btn-anim4 {
-            0% { bottom: -100%; }
-            50%,100% { bottom: 100%; }
-        }
-
-        .login-box .error-message {
-            color: #ff4d4d;
+        .error-message {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 5px;
             text-align: center;
-            margin: -15px 0 20px 0;
-            font-size: 14px;
+            color: #fff;
+            background-color: #f44336;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
-    <div class="login-box">
-        <img src="/static/Kntz Logo Site login.jpg" alt="KNTZ Logo" class="logo">
-        
+    <div class="login-container">
         <h2>Admin Login</h2>
-        <form method="POST" action="/admin/login">
-            <div class="user-box">
-                <input type="text" name="username" required>
-                <label>Username</label>
+        <form method="post">
+            <div class="form-group">
+                <label for="username">Usuário</label>
+                <input type="text" id="username" name="username" required>
             </div>
-            <div class="user-box">
-                <input type="password" name="password" required>
-                <label>Password</label>
+            <div class="form-group">
+                <label for="password">Senha</label>
+                <input type="password" id="password" name="password" required>
             </div>
-            <div class="user-box">
-                <input type="text" name="two_factor_code" required>
-                <label>Two Factor Code</label>
-            </div>
-            {% if error %}
-                <div class="error-message">{{ error }}</div>
-            {% endif %}
-            <a href="#" onclick="this.closest('form').submit(); return false;">
-                <span></span>
-                <span></span>
-                <span></span>
-                <span></span>
-                Submit
-            </a>
+            <button type="submit">Entrar</button>
         </form>
+        {% if error %}
+            <div class="error-message">{{ error }}</div>
+        {% endif %}
     </div>
 </body>
 </html>
