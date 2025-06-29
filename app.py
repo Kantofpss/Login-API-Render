@@ -19,6 +19,33 @@ def conectar_banco():
         print(f"Erro ao conectar ao banco de dados: {e}")
         raise
 
+# --- NOVO ENDPOINT ADICIONADO ---
+@app.route('/api/check-status', methods=['GET'])
+def check_status():
+    """Endpoint para verificar o status e a versão do sistema antes do login."""
+    try:
+        conn, cursor = conectar_banco()
+        # Garante que os valores padrão existam, caso o db_setup não tenha sido executado corretamente
+        cursor.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('system_status', 'online')")
+        cursor.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('system_version', '2.0')")
+        conn.commit()
+        
+        cursor.execute("SELECT key, value FROM system_settings WHERE key IN ('system_status', 'system_version')")
+        settings_list = cursor.fetchall()
+        settings = {row['key']: row['value'] for row in settings_list}
+        
+        # Adiciona valores padrão caso não estejam no banco
+        if 'system_status' not in settings:
+            settings['system_status'] = 'offline'
+        if 'system_version' not in settings:
+            settings['system_version'] = '1.0'
+            
+        conn.close()
+        return jsonify(settings), 200
+    except sqlite3.Error as e:
+        print(f"Erro no endpoint /api/check-status: {e}")
+        return jsonify({'status': 'erro', 'message': 'Erro no banco de dados'}), 500
+
 @app.route('/ping', methods=['GET'])
 def ping():
     try:
